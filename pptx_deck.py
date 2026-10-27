@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pptx_deck — unpack a PowerPoint .pptx into LAYERS for HOLO slides mode.
+"""pptx_deck — unpack a PowerPoint .pptx into LAYERS for LinkPresent.
 
 Stdlib only (zipfile + ElementTree), same rule as server.py: nothing to install.
 

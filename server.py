@@ -9,7 +9,7 @@ Endpoints:
   GET  /               → holo.html
   GET  /api/notes      → [{name, title, body}] from the folder in holo.json
                          (falls back to ./sample-notes so it runs instantly)
-  GET  /slides         → slides.html — SLIDES MODE: a .pptx pulled apart into layers
+  GET  /linkpresent    → linkpresent.html — LINKPRESENT: a .pptx pulled apart into layers
   GET  /api/decks       → [{name, size, mtime}] of the .pptx files in decks/
   GET  /api/deck?name=  → that deck unpacked into layered pieces (pptx_deck.py)
   GET  /api/deck/media  → one picture out of a deck (?name=&p=ppt/media/…)
@@ -92,7 +92,7 @@ def load_tree(limit_files=14):
         pass
     return tree
 
-# ---------- SLIDES MODE: decks/ holds the .pptx files the stage can present ----------
+# ---------- LINKPRESENT: decks/ holds the .pptx files the stage can present ----------
 def decks_dir():
     try:
         cfg = json.load(open(os.path.join(ROOT, "holo.json")))
@@ -166,11 +166,11 @@ class H(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(500, {"error": "holo.html missing"})
             return self._send(200, body, "text/html; charset=utf-8")
-        if p in ("/slides", "/slides.html"):
+        if p in ("/linkpresent", "/linkpresent.html"):
             try:
-                body = open(os.path.join(ROOT, "slides.html"), "rb").read()
+                body = open(os.path.join(ROOT, "linkpresent.html"), "rb").read()
             except OSError:
-                return self._send(500, {"error": "slides.html missing"})
+                return self._send(500, {"error": "linkpresent.html missing"})
             return self._send(200, body, "text/html; charset=utf-8")
         if p == "/api/decks":
             return self._send(200, list_decks())
@@ -279,5 +279,5 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"HOLO deck on http://localhost:{PORT}  ·  notes: {notes_dir()}")
-    print(f"HOLO slides on http://localhost:{PORT}/slides  ·  decks: {decks_dir()}")
+    print(f"LinkPresent on http://localhost:{PORT}/linkpresent  ·  decks: {decks_dir()}")
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

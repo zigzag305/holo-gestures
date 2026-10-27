@@ -23,7 +23,7 @@ git clone https://github.com/zubair-trabzada/holo-gestures.git ~/holo && cd ~/ho
 
 Then open **http://localhost:4890** in Chrome, allow the camera, and raise a hand. That's it.
 
-Presenting a PowerPoint? Open **http://localhost:4890/slides** instead — see *Slides mode* below.
+Presenting a PowerPoint? Open **http://localhost:4890/linkpresent** instead — see *LinkPresent* below.
 
 Python 3 is the only requirement (standard library only — nothing to `pip install`).
 
@@ -107,11 +107,11 @@ workflow.
 
 ---
 
-## 🎤 Slides mode — present a PowerPoint with your hands (Teams · Zoom · Meet)
+## 🎤 LinkPresent — present a PowerPoint with your hands (Teams · Zoom · Meet)
 
-Same server, second page: **http://localhost:4890/slides**
+Same server, second page: **http://localhost:4890/linkpresent**
 
-Build your deck in PowerPoint like always. HOLO unpacks the `.pptx` into its real objects —
+Build your deck in PowerPoint like always. LinkPresent unpacks the `.pptx` into its real objects —
 every title, card, picture, table and chart becomes its own layer floating over your camera.
 Pull a slide apart in mid-air, grab one chart out of it, tap a number to blow it up.
 Charts aren't screenshots: they're **rebuilt live from the numbers stored inside the file**,
@@ -141,27 +141,27 @@ Mouse: drag pieces, drag empty space to turn, wheel to pull apart, double-click 
 ### Use it in a meeting (any app, via OBS Virtual Camera)
 
 1. Install **OBS Studio** (free).
-2. Open `http://localhost:4890/slides` in Chrome, press **O** (meeting view) and **F** (fullscreen),
+2. Open `http://localhost:4890/linkpresent` in Chrome, press **O** (meeting view) and **F** (fullscreen),
    or keep it as its own window.
 3. In OBS: **Sources → + → Window Capture** (macOS: *macOS Screen Capture → Window*) → pick that
    Chrome window. Then **Start Virtual Camera**.
 4. In Teams / Zoom / Meet → camera settings → choose **OBS Virtual Camera**.
 
 Good to know:
-- HOLO uses your **real** webcam; the meeting app uses **OBS Virtual Camera**. If the meeting app
+- LinkPresent uses your **real** webcam; the meeting app uses **OBS Virtual Camera**. If the meeting app
   grabs the real webcam too, Windows may report it busy.
 - **Don't flip the video in OBS.** Your camera is mirrored on purpose so your hand lines up with
   what you touch; the slide text is drawn separately and is never mirrored. (Your *own* self-view in
   Teams may look flipped — the audience sees it the right way.)
-- Keep the HOLO window visible: Chrome slows down hand tracking in hidden windows.
+- Keep the LinkPresent window visible: Chrome slows down hand tracking in hidden windows.
 
 **What carries over from PowerPoint:** text and fonts, shapes, pictures, tables, native charts
 (bar, column, line, area, pie, doughnut — with their real data), groups, theme colours,
-speaker notes. **What doesn't:** PowerPoint's own animations and transitions (HOLO brings its own
+speaker notes. **What doesn't:** PowerPoint's own animations and transitions (LinkPresent brings its own
 motion), SmartArt internals, embedded video, EMF/WMF pictures, table styles.
 
-Test it without a camera: `/slides?sim=1` plays a scripted demo with synthetic hands ·
-`/slides?probe=1` runs the gesture test battery (**16/16**) · `/slides?clean=1` opens in meeting view.
+Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
+`/linkpresent?probe=1` runs the gesture test battery (**16/16**) · `/linkpresent?clean=1` opens in meeting view.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
 
 ---

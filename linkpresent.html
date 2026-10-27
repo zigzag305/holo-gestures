@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset="utf-8"><title>HOLO Slides — present a .pptx with your hands</title>
+<!doctype html><html><head><meta charset="utf-8"><title>LinkPresent — present a .pptx with your hands</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -111,7 +111,7 @@
 <canvas id="hud"></canvas>
 <div id="empty">NO DECK YET<br>drop a .pptx anywhere on this page<br>or put it in the decks/ folder</div>
 <div id="ui">
-  <span id="brand">H O L O · S L I D E S</span>
+  <span id="brand">L I N K P R E S E N T</span>
   <select id="deckSel" title="deck"></select>
   <span class="chip" id="loadBtn">LOAD .PPTX</span>
   <span class="chip" id="camBtn">HANDS ON</span>
@@ -131,7 +131,7 @@
 
 <script type="module">
 /* ============================================================================
-   HOLO SLIDES — a PowerPoint deck as a hologram you handle in mid-air.
+   LINKPRESENT — a PowerPoint deck as a hologram you handle in mid-air.
    The server unpacks the .pptx into its real objects (pptx_deck.py); this page
    stacks them as separate 3D layers over your mirrored camera, so a slide can be
    pulled apart, a chart grabbed out of it, and every chart is rebuilt live from
@@ -162,8 +162,8 @@ const CAM_LEVELS = [1, .6, .3, 0], GLASS_LEVELS = [.9, .78, .62, 1];
 const LAYOUTS = [ { name:'CENTER', frac:.74, cx:.5 }, { name:'SLIDE LEFT · YOU RIGHT', frac:.6, cx:.36 },
                   { name:'SLIDE RIGHT · YOU LEFT', frac:.6, cx:.64 }, { name:'FULL', frac:.94, cx:.5 } ];
 const VIEW = { cam: 0, glass: 0, layout: 0 };
-try { Object.assign(VIEW, JSON.parse(localStorage.getItem('holo-slides-view') || '{}')); } catch (_){}
-function saveView(){ try { localStorage.setItem('holo-slides-view', JSON.stringify(VIEW)); } catch (_){} }
+try { Object.assign(VIEW, JSON.parse(localStorage.getItem('linkpresent-view') || '{}')); } catch (_){}
+function saveView(){ try { localStorage.setItem('linkpresent-view', JSON.stringify(VIEW)); } catch (_){} }
 function applyView(){ cam.style.opacity = CAM_LEVELS[VIEW.cam % CAM_LEVELS.length];
   for (const s of Object.values(SLIDES)) if (s && s.plate) s.plate.style.opacity = GLASS_LEVELS[VIEW.glass % GLASS_LEVELS.length];
   layout(); }
@@ -1075,7 +1075,7 @@ async function probe(){
   ok('charts-have-data', charts.length && charts.every(c => c.chart.series[0].vals.some(v => v != null)), `${charts.length} charts`);
   const pass = R.filter(r => r.pass).length;
   window.__probe = { pass, total: R.length, results: R };
-  statusEl.textContent = `slides probe ${pass}/${R.length}`;
+  statusEl.textContent = `linkpresent probe ${pass}/${R.length}`;
   console.log('[probe]', JSON.stringify(window.__probe));
 }
 
