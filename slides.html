@@ -1,0 +1,1176 @@
+<!doctype html><html><head><meta charset="utf-8"><title>HOLO Slides — present a .pptx with your hands</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; overflow:hidden; background:#05070a; font-family:-apple-system,"Segoe UI",sans-serif; }
+  /* no camera (sim, blocked, or HANDS OFF): a dark studio instead of a black void */
+  body { background:radial-gradient(ellipse at 50% 40%, #13202a 0%, #070b0f 70%); }
+  #cam { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;
+         transform:scaleX(-1); opacity:1; transition:opacity .4s; }
+  #vignette { position:fixed; inset:0; z-index:2; pointer-events:none;
+         background:radial-gradient(ellipse at center, transparent 55%, rgba(4,6,9,.45) 100%); }
+  #stage { position:fixed; inset:0; z-index:3; perspective:1700px; overflow:hidden; }
+  .slide { position:absolute; left:0; top:0; transform-origin:0 0; transform-style:preserve-3d; }
+  .piece { position:absolute; transform-style:preserve-3d; will-change:transform, opacity; }
+  .piece .inner { position:absolute; inset:0; transform-style:preserve-3d; }
+  .piece.locked { pointer-events:none; }
+  .piece.hover > .inner { outline:2px solid rgba(125,255,217,.95); outline-offset:3px;
+         box-shadow:0 0 34px rgba(110,255,222,.55); }
+  .piece.held  > .inner { outline:2px solid #7dffd9; outline-offset:4px;
+         box-shadow:0 30px 70px rgba(0,0,0,.55), 0 0 46px rgba(110,255,222,.6); }
+  /* exploded: every layer reads as its own floating hologram pane */
+  body.exploded .piece:not(.locked):not(.bgplate) > .inner {
+         box-shadow:0 0 0 1px rgba(125,255,217,.42), 0 22px 50px rgba(0,0,0,.38), 0 0 26px rgba(110,255,222,.18); }
+  /* text and charts drawn straight on the slide carry their own glass once they float free,
+     so dark-on-light (or light-on-dark) text stays readable off the slide plate */
+  .piece.bare > .inner { transition:background .35s; border-radius:6px; }
+  body.exploded .piece.bare > .inner, .piece.bare.held > .inner, .piece.bare.focus > .inner { background:var(--bgc); }
+  .bgplate { border-radius:6px; box-shadow:0 30px 90px rgba(0,0,0,.55); }
+  body.exploded .bgplate { box-shadow:0 0 0 1.5px rgba(125,255,217,.55), 0 0 60px rgba(110,255,222,.25), 0 30px 90px rgba(0,0,0,.55); }
+  .tx { position:absolute; inset:0; display:flex; flex-direction:column; overflow:visible; }
+  .tx .p { white-space:pre-wrap; overflow-wrap:break-word; position:relative; }
+  .tx .bu { display:inline-block; }
+  .piece img { position:absolute; inset:0; width:100%; height:100%; user-select:none; -webkit-user-drag:none; }
+  .piece table { border-collapse:collapse; table-layout:fixed; }
+  .piece td { overflow:hidden; }
+  .piece td .tx { position:static; }
+  /* ---------- live charts ---------- */
+  .chart { position:absolute; inset:0; transform-style:preserve-3d; font-family:Calibri, Carlito, "Segoe UI", Arial, sans-serif; }
+  .chart .ctitle { position:absolute; left:0; right:0; top:4px; text-align:center; }
+  .chart .legend { position:absolute; left:0; right:0; display:flex; justify-content:center; gap:16px; }
+  .chart .legend i { display:inline-block; width:11px; height:11px; margin-right:6px; vertical-align:-1px; border-radius:2px; }
+  .chart .bar { position:absolute; transform-style:preserve-3d; }
+  .chart .bar .fill { position:absolute; inset:0; transform:scaleY(0); transform-origin:50% 100%;
+         transition:transform .75s cubic-bezier(.2,.9,.25,1.12); border-radius:2px 2px 0 0; }
+  .chart .bar.h .fill { transform:scaleX(0); transform-origin:0 50%; border-radius:0 2px 2px 0; }
+  .chart.live .bar .fill { transform:none; }
+  .chart .lbl { position:absolute; white-space:nowrap; opacity:0; transition:opacity .4s; }
+  .chart.live .lbl { opacity:1; }
+  .chart .cat, .chart .tick { position:absolute; white-space:nowrap; text-align:center; }
+  .chart svg { position:absolute; left:0; top:0; overflow:visible; }
+  .chart .ln { stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset 1.1s ease-out; }
+  .chart.live .ln { stroke-dashoffset:0; }
+  .chart .area { opacity:0; transition:opacity .9s .3s; }
+  .chart.live .area { opacity:.22; }
+  .chart .dot { opacity:0; transition:opacity .3s; }
+  .chart.live .dot { opacity:1; }
+  .chart .pie { transform:scale(.55) rotate(-70deg); opacity:0; transition:transform .9s cubic-bezier(.2,.9,.25,1.08), opacity .5s; }
+  .chart.live .pie { transform:none; opacity:1; }
+  /* ---------- HUD + chrome ---------- */
+  #hud { position:fixed; inset:0; z-index:5; pointer-events:none; }
+  #ui { position:fixed; z-index:6; left:0; right:0; top:0; display:flex; align-items:center; flex-wrap:wrap;
+        gap:10px; padding:12px 18px; pointer-events:none; }
+  #ui > * { pointer-events:auto; }
+  .chip, #deckSel { font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:11px; letter-spacing:.12em;
+        padding:7px 14px; border-radius:99px; cursor:pointer; user-select:none;
+        color:#7dffd9; background:rgba(10,16,20,.72); border:1px solid rgba(125,255,217,.35); }
+  .chip.off { color:#8a97a0; border-color:rgba(255,255,255,.14); }
+  #deckSel { max-width:260px; outline:none; appearance:none; -webkit-appearance:none; }
+  #brand { font-family:"SF Mono",ui-monospace,monospace; color:#e8fff7; font-size:12px; letter-spacing:.3em;
+        pointer-events:none; text-shadow:0 1px 6px rgba(0,0,0,.8); }
+  #status { margin-left:auto; font-family:"SF Mono",ui-monospace,monospace; font-size:10.5px; letter-spacing:.1em;
+        color:#9fb4ab; text-shadow:0 1px 4px rgba(0,0,0,.9); pointer-events:none; }
+  #counter { position:fixed; z-index:6; right:20px; bottom:18px; pointer-events:none;
+        font-family:"SF Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.14em; color:#bfeee0;
+        background:rgba(8,14,18,.7); border:1px solid rgba(125,255,217,.22); border-radius:10px; padding:7px 12px;
+        max-width:46vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #legend { position:fixed; left:18px; bottom:18px; z-index:6; pointer-events:none; max-width:min(860px, 60vw);
+        font-family:"SF Mono",ui-monospace,monospace; font-size:10px; letter-spacing:.08em; line-height:1.95;
+        color:#8fd8c2; background:rgba(8,14,18,.74); border:1px solid rgba(125,255,217,.22);
+        border-radius:12px; padding:8px 14px; }
+  #legend b { color:#7dffd9; font-weight:600; }
+  #legend { transition:opacity .6s; }
+  body.nolegend #legend { opacity:0; }
+  #notes { position:fixed; left:18px; bottom:96px; z-index:6; width:min(420px, 40vw); display:none;
+        font-size:14px; line-height:1.55; color:#e3efea; background:rgba(8,14,18,.86);
+        border:1px solid rgba(255,204,110,.35); border-radius:12px; padding:12px 16px; }
+  #notes b { display:block; font-family:"SF Mono",ui-monospace,monospace; font-size:10px; letter-spacing:.2em;
+        color:#ffcf7d; margin-bottom:6px; }
+  body.shownotes #notes { display:block; }
+  #toast { position:fixed; left:50%; top:16%; transform:translate(-50%,-6px); z-index:7; pointer-events:none;
+        font-family:"SF Mono",ui-monospace,monospace; font-size:13px; letter-spacing:.16em; color:#eafff8;
+        background:rgba(8,14,18,.78); border:1px solid rgba(125,255,217,.35); border-radius:12px; padding:9px 18px;
+        opacity:0; transition:opacity .25s, transform .25s; }
+  #toast.show, #hint.show { opacity:1; transform:translate(-50%,0); }
+  #hint { position:fixed; left:50%; bottom:6%; transform:translate(-50%,6px); z-index:7; pointer-events:none;
+        font-family:"SF Mono",ui-monospace,monospace; font-size:12px; letter-spacing:.14em; color:#ffe9c4;
+        background:rgba(8,14,18,.8); border:1px solid rgba(255,204,110,.4); border-radius:12px; padding:8px 16px;
+        opacity:0; transition:opacity .3s, transform .3s; }
+  #drop { position:fixed; inset:0; z-index:9; display:none; align-items:center; justify-content:center;
+        background:rgba(5,9,12,.82); border:3px dashed rgba(125,255,217,.6);
+        font-family:"SF Mono",ui-monospace,monospace; font-size:18px; letter-spacing:.2em; color:#a9ffe6; }
+  body.dragging #drop { display:flex; }
+  #empty { position:fixed; inset:0; z-index:4; display:none; align-items:center; justify-content:center; text-align:center;
+        font-family:"SF Mono",ui-monospace,monospace; font-size:14px; letter-spacing:.14em; line-height:2; color:#a9ffe6; }
+  /* MEETING VIEW: what Teams / Zoom / Meet see through OBS — slide, you, your hands. No chrome. */
+  body.clean #ui, body.clean #legend, body.clean #notes, body.clean #counter, body.clean #toast { display:none !important; }
+</style></head><body>
+<video id="cam" autoplay playsinline muted></video>
+<div id="vignette"></div>
+<div id="stage"></div>
+<canvas id="hud"></canvas>
+<div id="empty">NO DECK YET<br>drop a .pptx anywhere on this page<br>or put it in the decks/ folder</div>
+<div id="ui">
+  <span id="brand">H O L O · S L I D E S</span>
+  <select id="deckSel" title="deck"></select>
+  <span class="chip" id="loadBtn">LOAD .PPTX</span>
+  <span class="chip" id="camBtn">HANDS ON</span>
+  <span class="chip off" id="notesBtn">NOTES</span>
+  <span class="chip off" id="cleanBtn">MEETING VIEW</span>
+  <span id="status">booting…</span>
+</div>
+<div id="notes"><b>SPEAKER NOTES</b><span></span></div>
+<div id="counter"></div>
+<div id="legend"><b>SWIPE</b> open hand ← → next / back &nbsp;·&nbsp; <b>TWO PINCHES</b> apart = pull the slide apart · together = rebuild · twist = turn
+<br><b>PINCH</b> a piece = grab it out · second hand stretch = resize &nbsp;·&nbsp; <b>TAP</b> = focus / back &nbsp;·&nbsp; <b>POINT</b> = laser &nbsp;·&nbsp; <b>PEACE ✌</b> = reset
+<br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen · <b>?</b> this help</div>
+<div id="toast"></div>
+<div id="hint"></div>
+<div id="drop">DROP THE .PPTX</div>
+<input type="file" id="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+
+<script type="module">
+/* ============================================================================
+   HOLO SLIDES — a PowerPoint deck as a hologram you handle in mid-air.
+   The server unpacks the .pptx into its real objects (pptx_deck.py); this page
+   stacks them as separate 3D layers over your mirrored camera, so a slide can be
+   pulled apart, a chart grabbed out of it, and every chart is rebuilt live from
+   the numbers stored inside the file. Same hand engine as holo.html (MediaPipe
+   landmarks, One Euro smoothing, earned pinches, ghost-hand dedupe).
+   ?sim=1 scripted demo · ?probe=1 test battery · ?clean=1 meeting view
+   ?deck=name.pptx · ?slide=N
+   ========================================================================== */
+const Q = new URLSearchParams(location.search);
+const SIM = Q.has('sim'), PROBE = Q.has('probe');
+const $ = (id) => document.getElementById(id);
+const stage = $('stage'), hud = $('hud'), cam = $('cam'), statusEl = $('status');
+const HX = hud.getContext('2d');
+let W = innerWidth, H = innerHeight;
+function sizeHud(){ W = innerWidth; H = innerHeight; hud.width = W * devicePixelRatio; hud.height = H * devicePixelRatio;
+  HX.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); }
+sizeHud(); addEventListener('resize', () => { sizeHud(); layout(); });
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = (a) => 1 - Math.pow(1 - clamp(a, 0, 1), 3);
+const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
+let toastT = 0;
+function toast(msg, ms = 1100){ const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms); }
+
+/* ---------- look & feel knobs (keys C / G / L) ---------- */
+const CAM_LEVELS = [1, .6, .3, 0], GLASS_LEVELS = [.9, .78, .62, 1];
+const LAYOUTS = [ { name:'CENTER', frac:.74, cx:.5 }, { name:'SLIDE LEFT · YOU RIGHT', frac:.6, cx:.36 },
+                  { name:'SLIDE RIGHT · YOU LEFT', frac:.6, cx:.64 }, { name:'FULL', frac:.94, cx:.5 } ];
+const VIEW = { cam: 0, glass: 0, layout: 0 };
+try { Object.assign(VIEW, JSON.parse(localStorage.getItem('holo-slides-view') || '{}')); } catch (_){}
+function saveView(){ try { localStorage.setItem('holo-slides-view', JSON.stringify(VIEW)); } catch (_){} }
+function applyView(){ cam.style.opacity = CAM_LEVELS[VIEW.cam % CAM_LEVELS.length];
+  for (const s of Object.values(SLIDES)) if (s && s.plate) s.plate.style.opacity = GLASS_LEVELS[VIEW.glass % GLASS_LEVELS.length];
+  layout(); }
+
+/* ============================================================================
+   RENDERING — one DOM element per pptx object, positioned in slide pixels
+   ========================================================================== */
+const SERIF = /cambria|georgia|times|garamond|bookman|century|palatino|baskerville|didot|serif|caladea/i;
+function fontStack(f){
+  const base = SERIF.test(f || '') ? 'Cambria, Caladea, Georgia, "Times New Roman", serif'
+                                   : 'Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+  return f ? `"${f}", ${base}` : base;
+}
+function rgba(hex, a = 1){
+  if (!hex) return 'transparent';
+  const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a == null ? 1 : a})`;
+}
+function fillCss(f){
+  if (!f || f.none) return 'transparent';
+  if (f.grad && f.grad.length > 1)
+    return `linear-gradient(${((f.angle || 0) + 90).toFixed(0)}deg, ${f.grad.map(g => `${rgba(g.color, g.alpha)} ${g.pos}%`).join(', ')})`;
+  return rgba(f.color, f.alpha);
+}
+const GEOM_CLIP = {
+  diamond: 'polygon(50% 0,100% 50%,50% 100%,0 50%)', triangle: 'polygon(50% 0,100% 100%,0 100%)',
+  rtTriangle: 'polygon(0 0,100% 100%,0 100%)', hexagon: 'polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)',
+  pentagon: 'polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%)', parallelogram: 'polygon(25% 0,100% 0,75% 100%,0 100%)',
+  homePlate: 'polygon(0 0,85% 0,100% 50%,85% 100%,0 100%)', chevron: 'polygon(0 0,80% 0,100% 50%,80% 100%,0 100%,20% 50%)',
+  rightArrow: 'polygon(0 30%,65% 30%,65% 0,100% 50%,65% 100%,65% 70%,0 70%)',
+  leftArrow: 'polygon(100% 30%,35% 30%,35% 0,0 50%,35% 100%,35% 70%,100% 70%)',
+  octagon: 'polygon(29% 0,71% 0,100% 29%,100% 71%,71% 100%,29% 100%,0 71%,0 29%)',
+};
+function runStyle(r){
+  let s = `font-size:${r.size || 24}px;font-family:${fontStack(r.font)};color:${rgba(r.color || '#000000', r.alpha)};`;
+  if (r.b) s += 'font-weight:700;'; if (r.i) s += 'font-style:italic;'; if (r.u) s += 'text-decoration:underline;';
+  if (r.spacing) s += `letter-spacing:${r.spacing}px;`; if (r.caps) s += 'text-transform:uppercase;';
+  return s;
+}
+const ALIGN = { l:'left', ctr:'center', r:'right', just:'justify', dist:'justify' };
+function renderText(tx, host){
+  const box = el('div', 'tx', host);
+  const [l, t, r, b] = tx.insets || [9.6, 4.8, 9.6, 4.8];
+  box.style.padding = `${t}px ${r}px ${b}px ${l}px`;
+  box.style.justifyContent = tx.anchor === 'ctr' ? 'center' : tx.anchor === 'b' ? 'flex-end' : 'flex-start';
+  if (tx.wrap === false) box.style.whiteSpace = 'nowrap';
+  for (const p of tx.paras || []){
+    const d = el('div', 'p', box);
+    const first = (p.runs && p.runs[0]) || {};
+    const size = p.empty || first.size || 24;
+    d.style.textAlign = ALIGN[p.align] || 'left';
+    d.style.lineHeight = (1.2 * (p.lineSpacing || 1)).toFixed(3);
+    d.style.fontSize = size + 'px';
+    if (p.spaceAfter) d.style.marginBottom = p.spaceAfter + 'px';
+    if (p.spaceBefore) d.style.marginTop = p.spaceBefore + 'px';
+    const marL = p.marL || 0, ind = p.indent || 0;
+    if (marL) d.style.paddingLeft = marL + 'px';
+    if (p.empty){ d.style.height = (size * 1.2) + 'px'; continue; }
+    if (p.bullet){
+      const bu = el('span', 'bu', d); bu.textContent = p.bullet;
+      bu.style.cssText = runStyle(first) + `width:${Math.max(-ind, size * .9)}px;margin-left:${ind < 0 ? ind : -size * .9}px;`;
+    }
+    for (const r of p.runs){ const s = el('span', null, d); s.textContent = r.t; s.style.cssText = runStyle(r); }
+  }
+  return box;
+}
+function renderTable(t, host){
+  const tb = el('table', null, host);
+  const cg = el('colgroup', null, tb);
+  let tw = 0; for (const w of t.cols){ const c = el('col', null, cg); c.style.width = w + 'px'; tw += w; }
+  tb.style.width = tw + 'px';
+  for (const row of t.rows){
+    const tr = el('tr', null, tb); tr.style.height = row.h + 'px';
+    for (const c of row.cells){
+      if (c.merged) continue;
+      const td = el('td', null, tr);
+      if (c.span > 1) td.colSpan = c.span; if (c.rowSpan > 1) td.rowSpan = c.rowSpan;
+      const m = c.mar || [9.6, 4.8, 9.6, 4.8];
+      td.style.cssText = `background:${c.fill ? rgba(c.fill) : 'transparent'};border:1px solid ${c.border ? rgba(c.border) : 'rgba(150,165,175,.5)'};`
+        + `padding:${m[1]}px ${m[2]}px ${m[3]}px ${m[0]}px;vertical-align:${c.anchor === 'ctr' ? 'middle' : c.anchor === 'b' ? 'bottom' : 'top'};`;
+      if (c.text && c.text.paras && c.text.paras.length) renderText(Object.assign({}, c.text, { insets: [0, 0, 0, 0] }), td);
+    }
+  }
+  return tb;
+}
+
+/* ---------- number formats (Excel codes as stored in the chart) ---------- */
+function fmtNum(v, code){
+  if (v == null || isNaN(v)) return '';
+  if (!code || /^general$/i.test(code)){
+    const r = Math.round(v * 100) / 100;
+    return r.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+  code = code.split(';')[0].replace(/\[[^\]]*\]/g, '');
+  if (/%/.test(code.replace(/"[^"]*"/g, ''))) v *= 100;
+  let out = '', i = 0, num = false;
+  while (i < code.length){
+    const ch = code[i];
+    if (ch === '"'){ const j = code.indexOf('"', i + 1); out += code.slice(i + 1, j < 0 ? code.length : j); i = j < 0 ? code.length : j + 1; continue; }
+    if (ch === '\\'){ out += code[i + 1] || ''; i += 2; continue; }
+    if (ch === '_' || ch === '*'){ i += 2; continue; }
+    if ('#0,.?'.includes(ch)){
+      let j = i; while (j < code.length && '#0,.?'.includes(code[j])) j++;
+      const pat = code.slice(i, j);
+      if (!num){ const dec = pat.includes('.') ? (pat.split('.')[1].match(/[0#?]/g) || []).length : 0;
+        out += v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec, useGrouping: pat.includes(',') });
+        num = true; }
+      i = j; continue;
+    }
+    out += ch; i++;
+  }
+  return out;
+}
+const PALETTE = ['#3d7c8c', '#c2703d', '#e0a458', '#9db4bc', '#6b7a86', '#3f8f5b', '#8e5ea2', '#d1495b'];
+function niceMax(v){ if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; }
+
+/* ---------- LIVE CHARTS: rebuilt from the numbers inside the .pptx ---------- */
+function renderChart(c, W0, H0, host){
+  const root = el('div', 'chart', host);
+  const series = c.series, S0 = series[0];
+  const lab = Object.assign({}, c.labels || {}, S0.labels || {});
+  const ls = lab.labelStyle || {};
+  const lblSize = ls.size || 15, lblColor = rgba(ls.color || '#2b3a44');
+  const catAx = c.catAxis || {}, valAx = c.valAxis || {};
+  const axS = catAx.style || {}, axSize = axS.size || 15, axColor = rgba(axS.color || '#6b7a86');
+  const fontCss = `font-family:${fontStack(ls.font || axS.font)};`;
+  let top = 8, bottom = H0 - 6;
+  const parts = { bars: [], slices: [], root };
+  if (c.title){
+    const ts = c.titleStyle || {}, sz = ts.size || 18;
+    const t = el('div', 'ctitle', root); t.textContent = c.title;
+    t.style.cssText += `font-size:${sz}px;color:${rgba(ts.color || '#1e2a32')};font-weight:${ts.b ? 700 : 400};font-family:${fontStack(ts.font)};`;
+    top += sz * 1.7;
+  }
+  const isPie = c.type === 'pie' || c.type === 'doughnut';
+  if (c.legend && (series.length > 1 || isPie)){
+    const lg = el('div', 'legend', root), lsz = (c.legend.style && c.legend.style.size) || 14;
+    lg.style.cssText += `font-size:${lsz}px;color:${rgba((c.legend.style && c.legend.style.color) || '#2b3a44')};${fontCss}`;
+    const items = isPie ? S0.cats.map((k, i) => [k, (S0.pointColors && S0.pointColors[i]) || PALETTE[i % PALETTE.length]])
+                        : series.map((s, i) => [s.name, s.color || PALETTE[i % PALETTE.length]]);
+    for (const [name, col] of items){ const it = el('span', null, lg); const sw = el('i', null, it); sw.style.background = col; it.append(name); }
+    if (c.legend.pos === 'b'){ lg.style.bottom = '2px'; bottom -= lsz * 1.9; }
+    else { lg.style.top = top + 'px'; top += lsz * 1.9; }
+  }
+  const pw = W0, ph = bottom - top;
+  if (isPie){
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg'); svg.setAttribute('width', W0); svg.setAttribute('height', H0); root.appendChild(svg);
+    const g = document.createElementNS(svgNS, 'g'); g.setAttribute('class', 'pie'); svg.appendChild(g);
+    const cx = W0 / 2, cy = top + ph / 2, R = Math.min(pw, ph) / 2 * .92, r0 = c.type === 'doughnut' ? R * (c.hole || .5) : 0;
+    g.style.transformOrigin = `${cx}px ${cy}px`;
+    const vals = S0.vals.map(v => Math.max(0, v || 0)), tot = vals.reduce((a, b) => a + b, 0) || 1;
+    let a0 = -Math.PI / 2;
+    vals.forEach((v, i) => {
+      const a1 = a0 + v / tot * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
+      const P = (rr, a) => `${(cx + Math.cos(a) * rr).toFixed(2)} ${(cy + Math.sin(a) * rr).toFixed(2)}`;
+      const d = r0 > 0
+        ? `M${P(R, a0)} A${R} ${R} 0 ${big} 1 ${P(R, a1)} L${P(r0, a1)} A${r0} ${r0} 0 ${big} 0 ${P(r0, a0)} Z`
+        : `M${cx} ${cy} L${P(R, a0)} A${R} ${R} 0 ${big} 1 ${P(R, a1)} Z`;
+      const sg = document.createElementNS(svgNS, 'g'); g.appendChild(sg);
+      const path = document.createElementNS(svgNS, 'path'); path.setAttribute('d', d);
+      path.setAttribute('fill', (S0.pointColors && S0.pointColors[i]) || PALETTE[i % PALETTE.length]);
+      path.setAttribute('stroke', 'rgba(255,255,255,.9)'); path.setAttribute('stroke-width', '1.5'); sg.appendChild(path);
+      const mid = (a0 + a1) / 2;
+      if (lab.showVal || lab.showPercent || lab.showCat){
+        const txt = [lab.showCat ? S0.cats[i] : null,
+                     lab.showPercent ? fmtNum(v / tot, /%/.test(S0.fmt || '') ? S0.fmt : '0%') : null,
+                     lab.showVal ? fmtNum(v, S0.fmt) : null].filter(Boolean).join(' · ');
+        const rr = r0 > 0 ? (R + r0) / 2 : R * .64;
+        const t = document.createElementNS(svgNS, 'text');
+        t.setAttribute('x', cx + Math.cos(mid) * rr); t.setAttribute('y', cy + Math.sin(mid) * rr);
+        t.setAttribute('text-anchor', 'middle'); t.setAttribute('dominant-baseline', 'central');
+        t.setAttribute('style', `font-size:${lblSize}px;fill:${ls.color ? rgba(ls.color) : '#fff'};font-weight:${ls.b ? 700 : 600};${fontCss}`);
+        t.textContent = txt; if (v / tot > .035) sg.appendChild(t);
+      }
+      parts.slices.push({ g: sg, mid, R });
+      a0 = a1;
+    });
+    return parts;
+  }
+  // ---- cartesian: bar (col / bar), line, area
+  const cats = S0.cats.length ? S0.cats : S0.vals.map((_, i) => String(i + 1));
+  const nC = cats.length, nS = series.length;
+  const stacked = /stacked/i.test(c.grouping || ''), pct = /percent/i.test(c.grouping || '');
+  const all = [];
+  if (stacked) for (let i = 0; i < nC; i++) all.push(series.reduce((a, s) => a + (s.vals[i] || 0), 0));
+  else series.forEach(s => s.vals.forEach(v => v != null && all.push(v)));
+  let vmin = valAx.min != null ? valAx.min : Math.min(0, ...all);
+  let vmax = valAx.max != null ? valAx.max : (pct ? 1 : niceMax(Math.max(...all, 0) * (lab.showVal ? 1.14 : 1.04)));
+  if (valAx.max == null && !pct && lab.showVal) vmax = Math.max(...all) * 1.16;
+  if (vmax <= vmin) vmax = vmin + 1;
+  const horiz = c.type === 'bar' && c.barDir === 'bar';
+  const showTicks = !valAx.hidden, showCats = !catAx.hidden;
+  const padL = horiz ? (showCats ? Math.min(W0 * .3, 12 + Math.max(...cats.map(s => String(s).length)) * axSize * .52) : 8)
+                     : (showTicks ? 46 : 10);
+  const padB = horiz ? (showTicks ? axSize * 2 : 8) : (showCats ? axSize * 2.1 : 8);
+  const x0 = padL, y0 = top + 4, pw2 = W0 - padL - 12, ph2 = ph - padB - 4;
+  const axisLine = el('div', null, root);
+  axisLine.style.cssText = horiz ? `position:absolute;left:${x0}px;top:${y0}px;width:1.5px;height:${ph2}px;background:rgba(160,175,185,.8)`
+                                 : `position:absolute;left:${x0}px;top:${y0 + ph2}px;width:${pw2}px;height:1.5px;background:rgba(160,175,185,.8)`;
+  const valPos = (v) => (v - vmin) / (vmax - vmin);
+  if (showTicks){
+    for (let k = 0; k <= 4; k++){
+      const v = vmin + (vmax - vmin) * k / 4, t = el('div', 'tick', root);
+      t.textContent = fmtNum(v, valAx.fmt || S0.fmt); t.style.cssText += `font-size:${axSize}px;color:${axColor};${fontCss}`;
+      if (horiz){ t.style.left = (x0 + pw2 * k / 4 - 30) + 'px'; t.style.width = '60px'; t.style.top = (y0 + ph2 + 4) + 'px'; }
+      else { t.style.right = (W0 - x0 + 6) + 'px'; t.style.top = (y0 + ph2 - ph2 * k / 4 - axSize * .65) + 'px'; t.style.textAlign = 'right'; }
+    }
+  }
+  const band = (horiz ? ph2 : pw2) / nC;
+  if (showCats) cats.forEach((name, i) => {
+    const t = el('div', 'cat', root); t.textContent = name; t.style.cssText += `font-size:${axSize}px;color:${axColor};${fontCss}`;
+    if (horiz){ t.style.left = '0px'; t.style.width = (x0 - 8) + 'px'; t.style.textAlign = 'right';
+      t.style.top = (y0 + ph2 - band * (i + .5) - axSize * .65) + 'px'; }
+    else { t.style.left = (x0 + band * i) + 'px'; t.style.width = band + 'px'; t.style.top = (y0 + ph2 + axSize * .45) + 'px'; }
+  });
+  if (c.type === 'bar'){
+    const gW = band / (1 + (c.gap != null ? c.gap : 1.5));
+    const bW = stacked ? gW : gW / nS;
+    const acc = new Array(nC).fill(0);
+    series.forEach((s, j) => {
+      const col = s.color || PALETTE[j % PALETTE.length];
+      const sl = Object.assign({}, lab, s.labels || {});
+      s.vals.forEach((v, i) => {
+        if (v == null) return;
+        const val = pct ? v / (all[i] || 1) : v;
+        const base = stacked ? acc[i] : Math.max(vmin, 0), end = base + val; if (stacked) acc[i] = end;
+        const a = valPos(Math.min(base, end)), b = valPos(Math.max(base, end));
+        const bar = el('div', 'bar' + (horiz ? ' h' : ''), root), fill = el('div', 'fill', bar);
+        fill.style.background = (s.pointColors && s.pointColors[i]) || col;
+        const off = band * i + (band - gW) / 2 + (stacked ? 0 : j * bW);
+        if (horiz) bar.style.cssText += `left:${x0 + pw2 * a}px;width:${Math.max(1, pw2 * (b - a))}px;top:${y0 + ph2 - off - bW}px;height:${bW}px;`;
+        else bar.style.cssText += `left:${x0 + off}px;width:${bW}px;top:${y0 + ph2 - ph2 * b}px;height:${Math.max(1, ph2 * (b - a))}px;`;
+        const delay = (i * nS + j) * 55;
+        fill.style.transitionDelay = delay + 'ms';
+        if (sl.showVal){
+          const lb = el('span', 'lbl', bar); lb.textContent = fmtNum(v, sl.fmt || s.fmt);
+          lb.style.cssText += `font-size:${lblSize}px;color:${lblColor};${fontCss}transition-delay:${delay + 450}ms;`;
+          if (stacked){ lb.style.left = '0'; lb.style.right = '0'; lb.style.top = '50%'; lb.style.textAlign = 'center'; lb.style.transform = 'translateY(-50%)'; lb.style.color = '#fff'; }
+          else if (horiz){ lb.style.left = 'calc(100% + 6px)'; lb.style.top = '50%'; lb.style.transform = 'translateY(-50%)'; }
+          else { lb.style.left = '50%'; lb.style.bottom = 'calc(100% + 4px)'; lb.style.transform = 'translateX(-50%)'; }
+        }
+        parts.bars.push({ el: bar, k: i * nS + j });
+      });
+    });
+    return parts;
+  }
+  // line / area
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg'); svg.setAttribute('width', W0); svg.setAttribute('height', H0); root.appendChild(svg);
+  series.forEach((s, j) => {
+    const col = s.color || PALETTE[j % PALETTE.length];
+    const sl = Object.assign({}, lab, s.labels || {});
+    const pts = s.vals.map((v, i) => v == null ? null : [x0 + band * (i + .5), y0 + ph2 - ph2 * valPos(v)]);
+    const live = pts.filter(Boolean);
+    if (!live.length) return;
+    const dstr = 'M' + live.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L');
+    if (c.type === 'area'){
+      const ar = document.createElementNS(svgNS, 'path');
+      ar.setAttribute('d', dstr + ` L${live[live.length - 1][0]} ${y0 + ph2} L${live[0][0]} ${y0 + ph2} Z`);
+      ar.setAttribute('fill', col); ar.setAttribute('class', 'area'); svg.appendChild(ar);
+    }
+    const path = document.createElementNS(svgNS, 'path'); path.setAttribute('d', dstr); path.setAttribute('pathLength', '1');
+    path.setAttribute('class', 'ln'); path.setAttribute('fill', 'none'); path.setAttribute('stroke', col);
+    path.setAttribute('stroke-width', '4'); path.setAttribute('stroke-linejoin', 'round'); path.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(path);
+    pts.forEach((p, i) => {
+      if (!p) return;
+      const dot = document.createElementNS(svgNS, 'circle'); dot.setAttribute('cx', p[0]); dot.setAttribute('cy', p[1]); dot.setAttribute('r', 6);
+      dot.setAttribute('fill', col); dot.setAttribute('class', 'dot'); dot.style.transitionDelay = (300 + i * 110) + 'ms'; svg.appendChild(dot);
+      if (sl.showVal){
+        const lb = el('span', 'lbl', root); lb.textContent = fmtNum(s.vals[i], sl.fmt || s.fmt);
+        lb.style.cssText += `font-size:${lblSize}px;color:${lblColor};${fontCss}left:${p[0] - 60}px;width:120px;text-align:center;`
+          + `top:${p[1] + (sl.pos === 'b' ? 10 : -lblSize * 1.8)}px;transition-delay:${400 + i * 110}ms;`;
+      }
+      parts.bars.push({ el: null, k: i });
+    });
+  });
+  return parts;
+}
+
+function renderPiece(p, slideEl){
+  const w = el('div', 'piece' + (p.locked ? ' locked' : ''), slideEl);
+  w.style.cssText = `left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px;`;
+  const inner = el('div', 'inner', w);
+  const flips = (p.flipH ? ' scaleX(-1)' : '') + (p.flipV ? ' scaleY(-1)' : '');
+  if (p.rot || flips) inner.style.transform = (p.rot ? `rotate(${p.rot}deg)` : '') + flips;
+  let chart = null;
+  if ((p.kind === 'shape' && p.text && (!p.fill || p.fill.none)) || p.kind === 'chart') w.classList.add('bare');
+  if (p.kind === 'shape'){
+    if (p.fill && !p.fill.none) inner.style.background = fillCss(p.fill);   // bare text keeps the CSS glass slot free
+    if (p.geom === 'roundRect') inner.style.borderRadius = (p.radius || 8) + 'px';
+    else if (p.geom === 'ellipse') inner.style.borderRadius = '50%';
+    else if (GEOM_CLIP[p.geom]) inner.style.clipPath = GEOM_CLIP[p.geom];
+    if (p.line && !GEOM_CLIP[p.geom]) inner.style.border = `${p.line.w}px ${p.line.dash ? 'dashed' : 'solid'} ${rgba(p.line.color, p.line.alpha)}`;
+    if (p.text){
+      const tx = renderText(p.text, inner);
+      if (p.flipH || p.flipV) tx.style.transform = flips;           // text never reads mirrored
+      if (p.rot) inner.style.transform = `rotate(${p.rot}deg)`;
+    }
+  } else if (p.kind === 'line'){
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', Math.max(p.w, 1)); svg.setAttribute('height', Math.max(p.h, 1)); svg.style.overflow = 'visible';
+    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ln.setAttribute('x1', 0); ln.setAttribute('y1', 0); ln.setAttribute('x2', p.w < 1 ? 0 : p.w); ln.setAttribute('y2', p.h < 1 ? 0 : p.h);
+    ln.setAttribute('stroke', rgba(p.line.color, p.line.alpha)); ln.setAttribute('stroke-width', p.line.w);
+    if (p.line.dash) ln.setAttribute('stroke-dasharray', `${p.line.w * 4} ${p.line.w * 3}`);
+    svg.appendChild(ln); inner.appendChild(svg);
+  } else if (p.kind === 'pic'){
+    const img = el('img', null, inner); img.src = p.src; img.alt = p.name || ''; img.draggable = false;
+    if (p.geom === 'ellipse') img.style.borderRadius = '50%';
+  } else if (p.kind === 'table'){
+    renderTable(p.table, inner);
+  } else if (p.kind === 'chart'){
+    chart = renderChart(p.chart, p.w, p.h, inner);
+  }
+  return { w, inner, chart };
+}
+
+/* ============================================================================
+   DECK + SLIDE STATE
+   ========================================================================== */
+let DECK = null, DECK_NAME = '';
+let SLIDES = {};                     // index → { el, plate, pieces:[…], shownAt }
+let cur = 0;
+const V = { e: 0, eT: 0, yaw: 0, yT: 0, pitch: 0, pT: 0, focus: null, saved: null };
+let trans = null;                    // { from, dir, t0 }
+let FIT = 1, CX = 0, CY = 0;
+
+function layout(){
+  if (!DECK) return;
+  const L = LAYOUTS[VIEW.layout % LAYOUTS.length];
+  FIT = Math.min(W * L.frac / DECK.w, H * .8 / DECK.h);
+  CX = W * L.cx; CY = H * .53;
+  stage.style.perspectiveOrigin = `${CX}px ${CY}px`;
+}
+function buildSlide(i){
+  if (SLIDES[i]) return SLIDES[i];
+  const sd = DECK.slides[i];
+  const sEl = el('div', 'slide', stage);
+  sEl.style.width = DECK.w + 'px'; sEl.style.height = DECK.h + 'px'; sEl.style.display = 'none';
+  sEl.style.setProperty('--bgc', rgba(sd.bg.color || '#ffffff', .9));
+  const plateWrap = el('div', 'piece locked bgplate', sEl);
+  plateWrap.style.cssText = `left:0;top:0;width:${DECK.w}px;height:${DECK.h}px;`;
+  const plate = el('div', 'inner', plateWrap);
+  plate.style.background = sd.bg.image ? `center/cover url("${sd.bg.image}")` : fillCss(sd.bg.grad ? { grad: sd.bg.grad, angle: sd.bg.angle } : { color: sd.bg.color });
+  plate.style.borderRadius = '6px';
+  plate.style.opacity = GLASS_LEVELS[VIEW.glass % GLASS_LEVELS.length];
+  const pieces = [{ d: { id: 'bg' + i, locked: true, x: 0, y: 0, w: DECK.w, h: DECK.h, kind: 'bg' }, w: plateWrap, inner: plate, bg: true }];
+  for (const p of sd.pieces){
+    const r = renderPiece(p, sEl);
+    r.w.dataset.pid = p.id;
+    pieces.push({ d: p, w: r.w, inner: r.inner, chart: r.chart });
+  }
+  // text that sits ON a filled shape (a pill, a card) floats with that colour behind it —
+  // only text drawn straight onto the slide needs its own glass
+  pieces.forEach((p, k) => {
+    if (!p.w.classList.contains('bare') || p.d.kind === 'chart') return;
+    const cx = p.d.x + p.d.w / 2, cy = p.d.y + p.d.h / 2;
+    const under = pieces.slice(1, k).some(q => q.d.fill && !q.d.fill.none && (q.d.fill.alpha == null || q.d.fill.alpha > .5)
+      && cx > q.d.x && cx < q.d.x + q.d.w && cy > q.d.y && cy < q.d.y + q.d.h);
+    if (under) p.w.classList.remove('bare');
+  });
+  const free = pieces.filter(p => !p.d.locked);
+  free.forEach((p, k) => { p.rank = free.length > 1 ? k / (free.length - 1) : .5; });
+  // the title leads: front layer when the slide comes apart (it is first in z-order, so it would be buried)
+  for (const p of free) if (p.d.role === 'title') p.rank = 1.08;
+  pieces.forEach((p, k) => {
+    p.k = k; p.st = { x: 0, y: 0, z: 0, s: 1, tx: 0, ty: 0, tz: 0, ts: 1, o: 1, tO: 1 };
+    p.cx = p.d.x + p.d.w / 2 - DECK.w / 2; p.cy = p.d.y + p.d.h / 2 - DECK.h / 2; p.last = '';
+    p.w._p = p;
+  });
+  SLIDES[i] = { el: sEl, plate, pieces, shownAt: 0, i };
+  return SLIDES[i];
+}
+function showSlide(i, dir = 1, instant = false){
+  if (!DECK || !DECK.slides.length) return;
+  i = clamp(i, 0, DECK.slides.length - 1);
+  const prev = cur;
+  if (trans && SLIDES[trans.from] && trans.from !== i){ SLIDES[trans.from].el.style.display = 'none'; trans = null; }
+  if (i !== prev && SLIDES[prev] && !instant) trans = { from: prev, dir, t0: performance.now() };
+  else if (SLIDES[prev] && i !== prev) SLIDES[prev].el.style.display = 'none';
+  cur = i;
+  const s = buildSlide(i);
+  s.el.style.display = '';
+  s.shownAt = performance.now();
+  s.el.style.opacity = 1;
+  for (const p of s.pieces){ Object.assign(p.st, { x: 0, y: 0, z: 0, s: 1, tx: 0, ty: 0, tz: 0, ts: 1, o: 1, tO: 1 });
+    p.w.classList.remove('held', 'hover'); if (p.chart) p.chart.root.classList.remove('live'); p.live = false; }
+  Object.assign(V, { eT: 0, yT: 0, pT: 0, focus: null, saved: null });
+  if (instant) V.e = V.yaw = V.pitch = 0;
+  // pre-build the neighbours so a swipe never waits on layout
+  setTimeout(() => { if (DECK){ if (i + 1 < DECK.slides.length) hideBuilt(i + 1); if (i > 0) hideBuilt(i - 1); } }, 300);
+  const sd = DECK.slides[i];
+  $('counter').textContent = `${i + 1} / ${DECK.slides.length}${sd.title ? ' · ' + sd.title : ''}`;
+  $('notes').querySelector('span').textContent = sd.notes || '(no speaker notes on this slide)';
+  try { history.replaceState(null, '', `?${new URLSearchParams(Object.assign(Object.fromEntries(Q), { deck: DECK_NAME, slide: i + 1 }))}`); } catch (_){}
+}
+function hideBuilt(i){ const s = buildSlide(i); if (i !== cur && (!trans || trans.from !== i)) s.el.style.display = 'none'; }
+let lastNav = -9e9;
+function nav(d, now = performance.now()){
+  if (!DECK) return false;
+  const n = clamp(cur + d, 0, DECK.slides.length - 1);
+  if (n === cur){ toast(d > 0 ? 'LAST SLIDE' : 'FIRST SLIDE'); return false; }
+  lastNav = now; releaseAll();
+  showSlide(n, d);
+  toast(`${n + 1} / ${DECK.slides.length}`);
+  return true;
+}
+function resetSlide(){
+  const s = SLIDES[cur]; if (!s) return;
+  for (const p of s.pieces){ Object.assign(p.st, { tx: 0, ty: 0, tz: 0, ts: 1, tO: 1 }); p.w.classList.remove('held'); }
+  Object.assign(V, { eT: 0, yT: 0, pT: 0, focus: null, saved: null });
+  releaseAll();
+  toast('RESET');
+}
+function focusPiece(p){
+  const s = SLIDES[cur]; if (!s) return;
+  if (!V.focus) V.saved = { eT: V.eT, yT: V.yT, pT: V.pT };
+  if (V.focus && V.focus !== p) Object.assign(V.focus.st, { tx: V.focus.fx || 0, ty: V.focus.fy || 0, ts: V.focus.fs || 1, tz: 0 });
+  V.focus = p; p.w.classList.add('focus');
+  p.fx = p.st.tx; p.fy = p.st.ty; p.fs = p.st.ts;
+  const sc = Math.min(DECK.w * .84 / p.d.w, DECK.h * .8 / p.d.h, 3.4);
+  Object.assign(p.st, { tx: -p.cx - explodeOffset(p).x, ty: -p.cy - explodeOffset(p).y, ts: Math.max(1.05, sc), tz: 160 });
+  for (const q of s.pieces) if (q !== p && !q.bg) q.st.tO = .06;
+  V.eT = 0; V.yT = 0; V.pT = 0;
+}
+function unfocus(){
+  const p = V.focus; if (!p) return; p.w.classList.remove('focus');
+  Object.assign(p.st, { tx: p.fx || 0, ty: p.fy || 0, ts: p.fs || 1, tz: 0 });
+  for (const q of SLIDES[cur].pieces) q.st.tO = 1;
+  if (V.saved) Object.assign(V, V.saved);
+  V.focus = null; V.saved = null;
+}
+function explodeOffset(p){ return { x: p.cx * .09 * V.eT, y: p.cy * .09 * V.eT + (p.rank > 1 ? 30 * V.eT : 0) }; }
+
+/* ---------- per-frame: place every layer ---------- */
+function slideTransform(extraX = 0, rotY = 0){
+  const yaw = V.yaw - 15 * V.e + rotY, pitch = V.pitch + 7 * V.e;
+  return `translate3d(${CX + extraX}px, ${CY}px, 0) scale(${FIT}) rotateX(${pitch.toFixed(2)}deg) rotateY(${yaw.toFixed(2)}deg) translate(${-DECK.w / 2}px, ${-DECK.h / 2}px)`;
+}
+function frame(now){
+  if (!DECK || !SLIDES[cur]) return;
+  const k = .14;
+  V.e = lerp(V.e, V.eT, k); V.yaw = lerp(V.yaw, V.yT, k); V.pitch = lerp(V.pitch, V.pT, k);
+  if (Math.abs(V.e - V.eT) < .001) V.e = V.eT;
+  document.body.classList.toggle('exploded', V.e > .12);
+  const s = SLIDES[cur];
+  // transition: the old slide spins away, the new one assembles out of depth
+  let inX = 0;
+  if (trans){
+    const a = (now - trans.t0) / 620, fs = SLIDES[trans.from];
+    if (a >= 1 || !fs){ if (fs) fs.el.style.display = 'none'; trans = null; }
+    else {
+      const e2 = ease(a);
+      fs.el.style.transform = `translate3d(${CX - trans.dir * W * .75 * e2}px, ${CY}px, ${-500 * e2}px) scale(${FIT}) rotateY(${trans.dir * 38 * e2}deg) translate(${-DECK.w / 2}px, ${-DECK.h / 2}px)`;
+      fs.el.style.opacity = 1 - e2;
+      inX = trans.dir * W * .18 * (1 - e2);
+    }
+  }
+  s.el.style.transform = slideTransform(inX);
+  const e = V.e;
+  for (const p of s.pieces){
+    const st = p.st, m = .2;
+    st.x = lerp(st.x, st.tx, m); st.y = lerp(st.y, st.ty, m); st.z = lerp(st.z, st.tz, m); st.s = lerp(st.s, st.ts, m); st.o = lerp(st.o, st.tO, .15);
+    const delay = p.bg ? 0 : Math.min(60 + p.k * 30, 820);
+    const a = ease((now - s.shownAt - delay) / 560);
+    let ox = 0, oy = 0, oz;
+    if (p.bg || p.d.locked) oz = -e * 110;
+    else { ox = p.cx * .09 * e; oy = p.cy * .09 * e; oz = e * (60 + Math.min(p.rank, 1) * 400); if (p.rank > 1) oy += 30 * e; }
+    oz += (1 - a) * -1100;
+    const tf = `translate3d(${(ox + st.x).toFixed(1)}px,${(oy + st.y).toFixed(1)}px,${(oz + st.z).toFixed(1)}px) scale(${st.s.toFixed(3)})`;
+    const op = (p.bg ? Math.max(a, .001) : a * st.o).toFixed(3);
+    const key = tf + op;
+    if (key !== p.last){ p.w.style.transform = tf; p.w.style.opacity = op; p.last = key; }
+    if (p.chart){
+      if (!p.live && a > .6){ p.chart.root.classList.add('live'); p.live = true; }
+      // the chart's own pieces float apart too: bars step forward, doughnut slices pop out
+      const ce = Math.round(e * 100) / 100;
+      if (p.ce !== ce){ p.ce = ce;
+        for (const b of p.chart.bars) if (b.el) b.el.style.transform = `translateZ(${(ce * (16 + b.k * 9)).toFixed(1)}px)`;
+        for (const sl of p.chart.slices) sl.g.setAttribute('transform', `translate(${(Math.cos(sl.mid) * sl.R * .09 * ce).toFixed(2)} ${(Math.sin(sl.mid) * sl.R * .09 * ce).toFixed(2)})`);
+      }
+    }
+  }
+}
+
+/* ============================================================================
+   POINTER API — hands and mouse drive the same four verbs
+   ========================================================================== */
+const PT = {};                        // slot → { piece, x0, y0, t0, moved, mode, yaw0, pitch0, lx, ly }
+function pieceAt(x, y){
+  if (!DECK) return null;
+  for (const e2 of document.elementsFromPoint(x, y)){
+    const w = e2.closest && e2.closest('.piece');
+    if (w && w._p && !w._p.bg && !w._p.d.locked && SLIDES[cur] && w.parentElement === SLIDES[cur].el) return w._p;
+  }
+  return null;
+}
+function begin(slot, x, y, now = performance.now()){
+  const p = V.focus ? null : pieceAt(x, y);
+  const o = PT[slot] = { piece: p, x0: x, y0: y, lx: x, ly: y, t0: now, moved: 0, mode: p ? 'grab' : 'turn',
+                         yaw0: V.yT, pitch0: V.pT };
+  if (p){ o.z0 = p.st.tz; o.tx0 = p.st.tx; o.ty0 = p.st.ty; p.st.tz += 140; p.w.classList.add('held'); }
+  return o;
+}
+function move(slot, x, y){
+  const o = PT[slot]; if (!o) return;
+  o.moved = Math.max(o.moved, Math.hypot(x - o.x0, y - o.y0));
+  if (TWO.active) { o.lx = x; o.ly = y; return; }
+  if (o.mode === 'grab' && o.piece){
+    const sc = FIT; o.piece.st.tx += (x - o.lx) / sc; o.piece.st.ty += (y - o.ly) / sc;
+  } else if (o.mode === 'turn' && !V.focus){
+    V.yT = clamp(o.yaw0 + (x - o.x0) * .11, -70, 70); V.pT = clamp(o.pitch0 - (y - o.y0) * .07, -35, 35);
+  }
+  o.lx = x; o.ly = y;
+}
+function end(slot, x, y, now = performance.now()){
+  const o = PT[slot]; if (!o) return; delete PT[slot];
+  const tap = now - o.t0 < 320 && o.moved < 26 && !o.noTap;
+  if (o.piece){ o.piece.w.classList.remove('held'); o.piece.st.tz = o.z0 || 0; }
+  if (tap){
+    if (V.focus) unfocus();
+    else if (o.piece){ o.piece.st.tx -= 0; focusPiece(o.piece); }
+  } else if (o.piece && o.moved < 26) { /* held still: nothing */ }
+}
+function releaseAll(){ for (const k of Object.keys(PT)){ const o = PT[k]; if (o.piece) o.piece.w.classList.remove('held'); delete PT[k]; } TWO.active = false; }
+
+/* TWO PINCHES: apart = explode, together = rebuild, twist = turn.
+   If one hand is HOLDING a piece, the other hand's stretch resizes just that piece. */
+const TWO = { active: false };
+function twoUpdate(a, b, now = performance.now()){
+  if (!a || !b){ if (TWO.active){ TWO.active = false; for (const o of Object.values(PT)) o.noTap = true; } return; }
+  const d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x);
+  if (!TWO.active){
+    // a piece counts as HELD only if it was grabbed before the second hand arrived;
+    // two pinches landing together over the slide mean "pull the whole slide apart"
+    const held = Object.values(PT).find(o => o.piece && now - o.t0 > 250);
+    for (const o of Object.values(PT)){
+      if (o === held) continue;
+      if (o.piece){ Object.assign(o.piece.st, { tx: o.tx0, ty: o.ty0, tz: o.z0 || 0 }); o.piece.w.classList.remove('held'); o.piece = null; }
+      o.mode = 'none';
+    }
+    Object.assign(TWO, { active: true, d0: Math.max(40, d), a0: ang, e0: V.eT, yaw0: V.yT, piece: held ? held.piece : null,
+                         s0: held ? held.piece.st.ts : 1 });
+    for (const o of Object.values(PT)) o.noTap = true;
+    if (V.focus && !TWO.piece) unfocus();
+  }
+  const r = d / TWO.d0;
+  if (TWO.piece) TWO.piece.st.ts = clamp(TWO.s0 * r, .35, 4);
+  else {
+    // log scale: doubling the gap and halving it are equal and opposite moves; past the
+    // ends the band re-anchors, so crushing back always fully rebuilds the slide
+    const raw = TWO.e0 + Math.log(r) * .95;
+    if (raw > 1 || raw < 0){ TWO.e0 = raw > 1 ? 1 : 0; TWO.d0 = d; }
+    V.eT = clamp(raw, 0, 1);
+    let da = ang - TWO.a0; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+    V.yT = clamp(TWO.yaw0 + da * 57.3 * .9, -70, 70);
+  }
+  TWO.ax = a.x; TWO.ay = a.y; TWO.bx = b.x; TWO.by = b.y; TWO.r = r;
+}
+
+/* ============================================================================
+   HAND ENGINE (ported from holo.html — same field-tuned thresholds)
+   ========================================================================== */
+const MAP = { sx: 1, sy: 1, ox: 0, oy: 0, id: true };
+const AMP = 1.45;                      // camera only: a comfortable hand zone reaches the whole screen
+function updateMap(vw, vh){
+  if (!vw || !vh){ MAP.id = true; return; }
+  const s = Math.max(W / vw, H / vh); MAP.sx = vw * s; MAP.sy = vh * s;
+  MAP.ox = (W - MAP.sx) / 2; MAP.oy = (H - MAP.sy) / 2; MAP.id = false;
+}
+function px(p){
+  if (MAP.id) return { x: W - p.x * W, y: p.y * H };
+  const nx = .5 + (p.x - .5) * AMP, ny = .5 + (p.y - .5) * AMP;
+  return { x: W - (nx * MAP.sx + MAP.ox), y: ny * MAP.sy + MAP.oy };
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const PINCH_IN = .30, PINCH_OUT = .42, PINCH_EARN = 2;
+function handMetrics(lm){
+  const span = Math.max(1e-4, dist(lm[0], lm[9]));
+  const curl = (i) => dist(lm[i], lm[0]) / span;
+  const tips = [curl(8), curl(12), curl(16), curl(20)];
+  return { span, tips, pinch: dist(lm[4], lm[8]) / span,
+    openish: tips.every(t => t > 1.32),
+    point: tips[0] > 1.45 && tips[1] < 1.15 && tips[2] < 1.15 && tips[3] < 1.15,
+    peace: tips[0] > 1.45 && tips[1] > 1.45 && tips[2] < 1.15 && tips[3] < 1.15,
+    palm: { x: (lm[0].x + lm[9].x) / 2, y: (lm[0].y + lm[9].y) / 2 }, tip: lm[8], thumb: lm[4] };
+}
+function oneEuro(st, raw, now){
+  const f = st.oe || (st.oe = { t: now, x: raw.x, y: raw.y, dx: 0, dy: 0 });
+  let dt = (now - f.t) / 1000; if (!(dt > 1 / 240)) dt = 1 / 60; if (dt > .2) dt = .2; f.t = now;
+  const al = (cut) => { const r = 2 * Math.PI * cut * dt; return r / (r + 1); };
+  const ad = al(2.5);
+  f.dx += ((raw.x - f.x) / dt - f.dx) * ad; f.dy += ((raw.y - f.y) / dt - f.dy) * ad;
+  const a = al(1.3 + .009 * Math.hypot(f.dx, f.dy));
+  f.x += (raw.x - f.x) * a; f.y += (raw.y - f.y) * a;
+  return { x: f.x, y: f.y };
+}
+const mkHand = () => ({ present: false, seen: 0, pinch: false, pinchN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
+                       oe: null, cur: null, m: null, hover: null, upT: 0 });
+const HANDS = [mkHand(), mkHand()];
+const SPAN_MIN = .025;
+let lastPeace = -9e9;
+function dropHand(i){
+  const st = HANDS[i];
+  if (st.pinch) end('h' + i, st.cur ? st.cur.x : 0, st.cur ? st.cur.y : 0);
+  if (st.hover) st.hover.w.classList.remove('hover');
+  Object.assign(st, mkHand());
+}
+function assignHands(lms){
+  const out = [null, null], cand = lms.slice(0, 2), claimed = [false, false];
+  const palmPx = lm => px({ x: (lm[0].x + lm[9].x) / 2, y: (lm[0].y + lm[9].y) / 2 });
+  for (const i of [0, 1].filter(i => HANDS[i].present && HANDS[i].m).sort((a, b) => HANDS[b].seen - HANDS[a].seen)){
+    const last = px(HANDS[i].m.palm); let bi = -1, bd = 1e9;
+    cand.forEach((lm, k) => { if (!lm || claimed[k]) return; const p = palmPx(lm), d = Math.hypot(p.x - last.x, p.y - last.y); if (d < bd){ bd = d; bi = k; } });
+    if (bi >= 0 && bd < 260){ out[i] = cand[bi]; claimed[bi] = true; }
+  }
+  cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
+    const slot = out[0] == null && !HANDS[0].present ? 0 : out[1] == null && !HANDS[1].present ? 1 : out[0] == null ? 0 : out[1] == null ? 1 : -1;
+    if (slot >= 0){ out[slot] = lm; claimed[k] = true; } });
+  return out;
+}
+function ingestHands(raw, now = performance.now()){
+  for (let i = 0; i < 2; i++){
+    const st = HANDS[i]; let lm = raw[i];
+    let m = lm ? handMetrics(lm) : null;
+    if (m && m.span < SPAN_MIN){ lm = null; m = null; }
+    if (!lm){ if (st.present) dropHand(i); continue; }
+    st.present = true; st.seen++; st.upT = now; st.m = m;
+    const cur = st.cur = oneEuro(st, px(m.tip), now);
+    const palm = px(m.palm);
+    st.trail.push({ x: cur.x, y: cur.y, t: now }); if (st.trail.length > 10) st.trail.shift();
+    // hover highlight (what a pinch would grab right now)
+    if (st.seen >= 3 && !st.pinch){
+      const h = V.focus ? null : pieceAt(cur.x, cur.y);
+      if (h !== st.hover){ if (st.hover) st.hover.w.classList.remove('hover'); if (h) h.w.classList.add('hover'); st.hover = h; }
+    }
+    // PINCH: earned over PINCH_EARN frames, released with hysteresis
+    if (!st.pinch && st.seen >= 3 && m.pinch < PINCH_IN){
+      if (++st.pinchN >= PINCH_EARN){ st.pinch = true; st.swipe.length = 0;
+        if (st.hover){ st.hover.w.classList.remove('hover'); st.hover = null; }
+        begin('h' + i, cur.x, cur.y, now); }
+    } else if (!st.pinch && m.pinch >= PINCH_IN) st.pinchN = 0;
+    else if (st.pinch && m.pinch > PINCH_OUT){ st.pinch = false; st.pinchN = 0; end('h' + i, cur.x, cur.y, now); }
+    else if (st.pinch) move('h' + i, cur.x, cur.y);
+    // SWIPE: an open hand travelling fast sideways turns the page
+    if (!st.pinch && m.openish && st.seen >= 3){
+      st.swipe.push({ x: palm.x, y: palm.y, t: now });
+      while (st.swipe.length && now - st.swipe[0].t > 340) st.swipe.shift();
+      const a = st.swipe[0], b = st.swipe[st.swipe.length - 1];
+      if (a && b !== a){
+        const dx = b.x - a.x, dy = b.y - a.y;
+        if (Math.abs(dx) > Math.max(150, W * .17) && Math.abs(dy) < Math.abs(dx) * .6 && now - lastNav > 850
+            && !HANDS.some(h => h.pinch)){
+          if (V.focus) unfocus(); else nav(dx < 0 ? 1 : -1, now);
+          st.swipe.length = 0; lastNav = now;
+        }
+      }
+    } else st.swipe.length = 0;
+    // PEACE ✌ held = reset this slide
+    if (m.peace && !st.pinch){ if (++st.peaceN === 8 && now - lastPeace > 1500){ lastPeace = now; resetSlide(); } }
+    else st.peaceN = 0;
+    // POINT = laser pointer for the audience
+    if (m.point && !st.pinch){ st.pointN++; if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
+    else st.pointN = 0;
+    while (st.laser.length && now - st.laser[0].t > 450) st.laser.shift();
+  }
+  const pa = HANDS[0].pinch && HANDS[0].cur, pb = HANDS[1].pinch && HANDS[1].cur;
+  twoUpdate(pa || null, pb || null, now);
+}
+function reapStale(){ const now = performance.now(); for (let i = 0; i < 2; i++) if (HANDS[i].present && now - HANDS[i].upT > 280) dropHand(i); }
+
+/* ---------- HUD: fingertips, pinch state, stretch line, laser ---------- */
+function drawHud(now){
+  HX.clearRect(0, 0, W, H);
+  for (const st of HANDS){
+    if (!st.present || !st.cur || st.seen < 3) continue;
+    if (st.laser.length && st.pointN >= 4){
+      HX.lineCap = 'round';
+      for (let k = 1; k < st.laser.length; k++){
+        const a = st.laser[k - 1], b = st.laser[k], f = 1 - (now - b.t) / 450;
+        HX.strokeStyle = `rgba(255,70,70,${(f * .55).toFixed(3)})`; HX.lineWidth = 7 * f + 1;
+        HX.beginPath(); HX.moveTo(a.x, a.y); HX.lineTo(b.x, b.y); HX.stroke();
+      }
+      HX.fillStyle = '#ff3b3b'; HX.shadowColor = '#ff3b3b'; HX.shadowBlur = 24;
+      HX.beginPath(); HX.arc(st.cur.x, st.cur.y, 9, 0, 7); HX.fill(); HX.shadowBlur = 0;
+      continue;
+    }
+    const c = st.cur;
+    HX.shadowColor = 'rgba(110,255,222,.9)'; HX.shadowBlur = 16;
+    HX.strokeStyle = 'rgba(125,255,217,.95)'; HX.lineWidth = 2.5;
+    HX.beginPath(); HX.arc(c.x, c.y, st.pinch ? 11 : 16, 0, 7); HX.stroke();
+    if (st.pinch){ HX.fillStyle = 'rgba(125,255,217,.55)'; HX.fill(); }
+    else if (st.pinchN){ HX.fillStyle = 'rgba(125,255,217,.2)'; HX.fill(); }
+    HX.shadowBlur = 0;
+    if (st.peaceN > 0 && st.peaceN < 8){
+      HX.strokeStyle = 'rgba(255,207,125,.9)'; HX.lineWidth = 3;
+      HX.beginPath(); HX.arc(c.x, c.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * st.peaceN / 8); HX.stroke();
+    }
+  }
+  if (TWO.active){
+    HX.setLineDash([6, 8]); HX.strokeStyle = 'rgba(125,255,217,.75)'; HX.lineWidth = 2;
+    HX.beginPath(); HX.moveTo(TWO.ax, TWO.ay); HX.lineTo(TWO.bx, TWO.by); HX.stroke(); HX.setLineDash([]);
+    HX.font = '600 12px ui-monospace, Menlo, monospace'; HX.fillStyle = '#bfffee'; HX.textAlign = 'center';
+    HX.fillText(TWO.piece ? `SIZE ${Math.round(TWO.piece.st.ts * 100)}%` : `APART ${Math.round(V.eT * 100)}%`,
+                (TWO.ax + TWO.bx) / 2, (TWO.ay + TWO.by) / 2 - 14);
+  }
+}
+
+/* ============================================================================
+   CAMERA + MEDIAPIPE (self-hosted first, CDN fallback — same as holo.html)
+   ========================================================================== */
+let landmarker = null, camOn = false, camStarting = false, lastVideoT = -1, stream = null;
+async function startCamera(){
+  if (SIM || PROBE || camOn || camStarting) return;
+  camStarting = true; statusEl.textContent = 'loading hand tracking…';
+  try {
+    if (!landmarker){
+      let mp, wasmDir = '/vendor/wasm', model = '/vendor/hand_landmarker.task';
+      try { mp = await import('/vendor/vision_bundle.mjs'); }
+      catch (le){ console.warn('[slides] local bundle failed, using CDN', le);
+        mp = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+        wasmDir = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+        model = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'; }
+      const files = await mp.FilesetResolver.forVisionTasks(wasmDir);
+      const opts = (d) => ({ baseOptions: { modelAssetPath: model, delegate: d }, runningMode: 'VIDEO', numHands: 2,
+                             minHandDetectionConfidence: .6, minHandPresenceConfidence: .6, minTrackingConfidence: .6 });
+      try { landmarker = await mp.HandLandmarker.createFromOptions(files, opts('GPU')); }
+      catch (_){ landmarker = await mp.HandLandmarker.createFromOptions(files, opts('CPU')); }
+    }
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+  } catch (e){
+    camStarting = false;
+    const n = e && e.name;
+    statusEl.textContent = n === 'NotAllowedError' ? 'camera blocked · allow it in the address bar, then HANDS ON'
+      : n === 'NotFoundError' ? 'no camera found · keys + mouse still work' : n === 'NotReadableError' ? 'camera busy in another app (Teams?) · see README'
+      : 'hand tracking unavailable · keys + mouse still work';
+    $('camBtn').classList.add('off'); return;
+  }
+  cam.srcObject = stream; camOn = true; camStarting = false;
+  $('camBtn').classList.remove('off'); $('camBtn').textContent = 'HANDS ON';
+  statusEl.textContent = 'hands live · on-device';
+  const tick = () => {
+    if (!camOn) return;
+    if (cam.currentTime !== lastVideoT && cam.videoWidth){
+      lastVideoT = cam.currentTime; updateMap(cam.videoWidth, cam.videoHeight);
+      const res = landmarker.detectForVideo(cam, performance.now());
+      const hd = res.handednesses || res.handedness || [];
+      let pair = (res.landmarks || []).map((lm, i) => ({ lm, s: (hd[i] && hd[i][0] && hd[i][0].score) ?? 1 })).filter(p => p.s > .5);
+      // ghost-hand dedupe: one physical hand reported twice must not become a two-hand stretch
+      const twoLive = HANDS[0].present && HANDS[0].seen > 4 && HANDS[1].present && HANDS[1].seen > 4;
+      if (pair.length === 2){
+        const P2 = p => ({ x: (p.lm[0].x + p.lm[9].x) / 2, y: (p.lm[0].y + p.lm[9].y) / 2 });
+        const S2 = p => Math.hypot(p.lm[0].x - p.lm[9].x, p.lm[0].y - p.lm[9].y);
+        const dd = Math.hypot(P2(pair[0]).x - P2(pair[1]).x, P2(pair[0]).y - P2(pair[1]).y);
+        if (dd < Math.max(S2(pair[0]), S2(pair[1])) * (twoLive ? .5 : 1.35)) pair = [pair[0].s >= pair[1].s ? pair[0] : pair[1]];
+        else { const [big, small] = S2(pair[0]) >= S2(pair[1]) ? [pair[0], pair[1]] : [pair[1], pair[0]];
+          if (S2(small) < S2(big) * .55 && small.s < .9) pair = [big]; }
+      }
+      ingestHands(assignHands(pair.map(p => p.lm)));
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function stopCamera(){
+  camOn = false; if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; cam.srcObject = null;
+  for (let i = 0; i < 2; i++) dropHand(i);
+  $('camBtn').classList.add('off'); $('camBtn').textContent = 'HANDS OFF'; statusEl.textContent = 'hands off · keys + mouse';
+}
+
+/* ============================================================================
+   SIM — synthetic hands play the whole show (no camera needed)
+   ========================================================================== */
+function synthHand(sx, sy, pose, scale){
+  const x = 1 - sx, y = sy, lm = [], s = scale || .09;           // screen coords → mirrored landmark space
+  const spread = pose === 'open' ? 1.0 : pose === 'fist' ? .38 : .78;
+  lm[0] = { x, y: y + s * .9 }; lm[9] = { x, y: y - s * .1 };
+  lm[1] = { x: x - s * .35, y: y + s * .55 }; lm[2] = { x: x - s * .5, y: y + s * .3 }; lm[3] = { x: x - s * .55, y: y + s * .1 };
+  lm[5] = { x: x - s * .3, y: y - s * .15 }; lm[13] = { x: x + s * .15, y: y - s * .15 }; lm[17] = { x: x + s * .32, y: y - s * .1 };
+  const tipY = y - s * (pose === 'fist' ? .35 : 1.05) * spread;
+  lm[8] = { x: pose === 'pinch' ? x - s * .18 : pose === 'point' ? x - s * .28 : x - s * .28 * spread,
+            y: pose === 'pinch' ? y - s * .5 : pose === 'point' ? y - s * 1.05 : tipY };
+  lm[4] = { x: pose === 'pinch' ? x - s * .16 : x - s * .62 * spread, y: pose === 'pinch' ? y - s * .48 : y + s * .05 };
+  const curlY = y - s * .133;
+  lm[12] = { x: x - s * .05, y: pose === 'point' ? curlY : tipY };
+  lm[16] = { x: x + s * .16, y: ((pose === 'point' || pose === 'peace') ? curlY : tipY) + s * .06 };
+  lm[20] = { x: x + s * .3, y: ((pose === 'point' || pose === 'peace') ? curlY : tipY) + s * .14 };
+  for (const [a, b, i] of [[5, 8, 6], [5, 8, 7], [9, 12, 10], [9, 12, 11], [13, 16, 14], [13, 16, 15], [17, 20, 18], [17, 20, 19]]){
+    const p = lm[a], q = lm[b], k = (i % 2 ? .66 : .33); lm[i] = { x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k };
+  }
+  return lm;
+}
+// a fingertip target (screen px) → the palm position that puts the INDEX TIP there
+function handAtTip(tx, ty, pose){
+  const s = .09, nx = tx / W, ny = ty / H;
+  const tip = synthHand(.5, .5, pose, s)[8];                       // offset of tip from palm for this pose
+  const offX = (1 - tip.x) - .5, offY = tip.y - .5;
+  return synthHand(nx - offX, ny - offY, pose, s);
+}
+function biggestPiece(pref){
+  const s = SLIDES[cur]; if (!s) return null;
+  const free = s.pieces.filter(p => !p.bg && !p.d.locked);
+  const pick = (f) => free.filter(f).sort((a, b) => b.d.w * b.d.h - a.d.w * a.d.h)[0];
+  return (pref && pick(pref)) || pick(p => p.d.kind === 'chart' || p.d.kind === 'table') || pick(p => p.d.text) || free[0] || null;
+}
+function screenOf(p){ const r = p.w.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+function demoSteps(){
+  const C = {};
+  const hold = (ms, f) => ({ d: ms, f });
+  const none = (ms) => hold(ms, () => []);
+  const swipe = [hold(450, () => [synthHand(.74, .62, 'open')]),
+                 hold(300, k => [synthHand(lerp(.74, .26, ease(k)), .62, 'open')]), none(900)];
+  const stretch = [hold(250, () => [synthHand(.44, .6, 'open'), synthHand(.56, .6, 'open')]),
+                   hold(250, () => [synthHand(.44, .6, 'pinch'), synthHand(.56, .6, 'pinch')]),
+                   hold(1300, k => [synthHand(lerp(.44, .2, ease(k)), lerp(.6, .66, k), 'pinch'), synthHand(lerp(.56, .8, ease(k)), lerp(.6, .54, k), 'pinch')]),
+                   hold(250, () => [synthHand(.2, .66, 'open'), synthHand(.8, .54, 'open')]), none(1500)];
+  const grab = [{ d: 10, f: () => [], s: () => { const p = biggestPiece(q => q.d.kind === 'chart' || q.d.kind === 'table'); C.g = p ? screenOf(p) : { x: W / 2, y: H / 2 }; } },
+                hold(350, () => [handAtTip(C.g.x, C.g.y, 'open')]),
+                hold(200, () => [handAtTip(C.g.x, C.g.y, 'pinch')]),
+                hold(900, k => [handAtTip(C.g.x - W * .1 * ease(k), C.g.y - H * .08 * ease(k), 'pinch')]),
+                hold(250, () => [handAtTip(C.g.x - W * .1, C.g.y - H * .08, 'open')]), none(500)];
+  const focus = [{ d: 10, f: () => [], s: () => { const p = biggestPiece(q => q.d.text && q.d.w * q.d.h < DECK.w * DECK.h * .2 && q.d.role !== 'title'); C.f = p ? screenOf(p) : { x: W * .6, y: H * .5 }; } },
+                 hold(400, () => [handAtTip(C.f.x, C.f.y, 'open')]), hold(150, () => [handAtTip(C.f.x, C.f.y, 'pinch')]),
+                 hold(200, () => [handAtTip(C.f.x, C.f.y, 'open')]), hold(1800, () => [synthHand(.85, .8, 'open')]),
+                 hold(150, () => [synthHand(.85, .8, 'pinch')]), hold(200, () => [synthHand(.85, .8, 'open')]), none(700)];
+  const laser = [hold(1400, k => [synthHand(.35 + .3 * Math.sin(k * 3), .45 + .08 * Math.cos(k * 5), 'point')]), none(300)];
+  const peace = [hold(700, () => [synthHand(.7, .55, 'peace')]), none(1100)];
+  return [none(1200), ...swipe, ...stretch, ...grab, ...focus, ...laser, ...peace];
+}
+let SIMQ = null;
+function simTick(now){
+  if (!SIMQ){ SIMQ = { steps: demoSteps(), i: 0, t0: now }; if (SIMQ.steps[0].s) SIMQ.steps[0].s(); }
+  let st = SIMQ.steps[SIMQ.i];
+  while (now - SIMQ.t0 > st.d){
+    SIMQ.t0 += st.d; SIMQ.i++;
+    if (SIMQ.i >= SIMQ.steps.length){ SIMQ = null; return; }
+    st = SIMQ.steps[SIMQ.i]; if (st.s) st.s();
+  }
+  const hands = st.f((now - SIMQ.t0) / st.d) || [];
+  ingestHands([hands[0] || null, hands[1] || null], now);
+}
+
+/* ============================================================================
+   PROBE — the real engine on synthetic frames, scored like holo's ?probe=1
+   ========================================================================== */
+async function probe(){
+  const R = []; const ok = (name, pass, info = '') => R.push({ name, pass: !!pass, info });
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  let T = performance.now();
+  const feed = (n, fn) => { for (let k = 0; k < n; k++){ T += 16; const h = fn(k / Math.max(1, n - 1)) || []; ingestHands([h[0] || null, h[1] || null], T); } };
+  const clear = () => feed(3, () => []);
+  showSlide(Math.min(3, DECK.slides.length - 1), 1, true); await wait(1700);
+  const start = cur;
+  // 1-2 swipes
+  feed(6, () => [synthHand(.75, .6, 'open')]); feed(14, k => [synthHand(lerp(.75, .25, k), .6, 'open')]); clear();
+  ok('swipe-next', cur === start + 1, `${start}→${cur}`); T += 1000; await wait(900);
+  feed(6, () => [synthHand(.25, .6, 'open')]); feed(14, k => [synthHand(lerp(.25, .75, k), .6, 'open')]); clear();
+  ok('swipe-back', cur === start, `→${cur}`); T += 1000; await wait(1700);
+  // 3-4 stretch apart / crush together
+  feed(5, () => [synthHand(.45, .6, 'pinch'), synthHand(.55, .6, 'pinch')]);
+  feed(20, k => [synthHand(lerp(.45, .2, k), .6, 'pinch'), synthHand(lerp(.55, .8, k), .6, 'pinch')]);
+  ok('stretch-explode', V.eT > .6, V.eT.toFixed(2));
+  feed(20, k => [synthHand(lerp(.2, .44, k), .6, 'pinch'), synthHand(lerp(.8, .56, k), .6, 'pinch')]); clear();
+  ok('crush-rebuild', V.eT < .2, V.eT.toFixed(2));
+  // 5 twist turns the hologram
+  feed(5, () => [synthHand(.35, .5, 'pinch'), synthHand(.65, .5, 'pinch')]);
+  feed(16, k => [synthHand(.35, lerp(.5, .62, k), 'pinch'), synthHand(.65, lerp(.5, .38, k), 'pinch')]); clear();
+  ok('twist-turn', Math.abs(V.yT) > 10, V.yT.toFixed(1)); V.yT = 0; await wait(500);
+  // 6 grab a piece and pull it out
+  const p = biggestPiece(); const at = screenOf(p);
+  feed(6, () => [handAtTip(at.x, at.y, 'open')]); feed(4, () => [handAtTip(at.x, at.y, 'pinch')]);
+  feed(16, k => [handAtTip(at.x - 160 * k, at.y - 60 * k, 'pinch')]);
+  ok('grab-pull', Math.abs(p.st.tx) > 60 && PT.h0 && PT.h0.piece === p, `tx=${p.st.tx.toFixed(0)}`);
+  // 7 second hand stretches the HELD piece
+  feed(4, k => [handAtTip(at.x - 160, at.y - 60, 'pinch'), synthHand(.5, .8, 'pinch')]);
+  feed(16, k => [handAtTip(at.x - 160, at.y - 60, 'pinch'), synthHand(lerp(.5, .85, k), .8, 'pinch')]);
+  ok('two-hand-resize', p.st.ts > 1.3, p.st.ts.toFixed(2));
+  feed(3, () => [handAtTip(at.x - 160, at.y - 60, 'open')]); clear();
+  // 8 peace resets
+  feed(12, () => [synthHand(.7, .55, 'peace')]); clear();
+  ok('peace-reset', Math.abs(p.st.tx) < 1 && p.st.ts === 1 && V.eT === 0, `tx=${p.st.tx.toFixed(0)} s=${p.st.ts}`);
+  await wait(500);
+  // 9-10 tap focuses, tap again returns
+  const q = biggestPiece(z => z.d.text && z.d.role !== 'title') || p; const qa = screenOf(q);
+  feed(6, () => [handAtTip(qa.x, qa.y, 'open')]); feed(4, () => [handAtTip(qa.x, qa.y, 'pinch')]); feed(4, () => [handAtTip(qa.x, qa.y, 'open')]);
+  ok('tap-focus', V.focus === q, q.d.name || q.d.kind);
+  feed(4, () => [synthHand(.9, .85, 'open')]); feed(4, () => [synthHand(.9, .85, 'pinch')]); feed(4, () => [synthHand(.9, .85, 'open')]); clear();
+  ok('tap-unfocus', V.focus === null);
+  // 11 point = laser
+  feed(10, k => [synthHand(.4 + k * .1, .4, 'point')]);
+  ok('point-laser', HANDS[0].laser.length > 3 && !HANDS[0].pinch, `${HANDS[0].laser.length} pts`); clear();
+  // 12 pinch empty space + drag turns the slide
+  feed(4, () => [synthHand(.97, .1, 'open')]); feed(4, () => [synthHand(.97, .1, 'pinch')]);
+  feed(14, k => [synthHand(lerp(.97, .8, k), .1, 'pinch')]); clear();
+  ok('empty-drag-turn', Math.abs(V.yT) > 5, V.yT.toFixed(1)); resetSlide();
+  // 13 ghost-free: one hand alone never explodes
+  feed(20, k => [synthHand(lerp(.3, .7, k), .5, 'pinch')]); clear();
+  ok('one-hand-no-explode', V.eT === 0, V.eT.toFixed(2));
+  // 14 keyboard
+  const b4 = cur; T += 1000; dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); ok('key-next', cur === b4 + 1);
+  // 15 every slide of the deck renders without a frame error
+  let bad = 0; for (let i = 0; i < DECK.slides.length; i++){ try { buildSlide(i); } catch (e){ bad++; console.error(e); } }
+  ok('all-slides-build', bad === 0, `${DECK.slides.length} slides`);
+  // 16 charts carry real data
+  const charts = DECK.slides.flatMap(s => s.pieces.filter(z => z.kind === 'chart'));
+  ok('charts-have-data', charts.length && charts.every(c => c.chart.series[0].vals.some(v => v != null)), `${charts.length} charts`);
+  const pass = R.filter(r => r.pass).length;
+  window.__probe = { pass, total: R.length, results: R };
+  statusEl.textContent = `slides probe ${pass}/${R.length}`;
+  console.log('[probe]', JSON.stringify(window.__probe));
+}
+
+/* ============================================================================
+   MAIN LOOP, KEYS, MOUSE, DECK LOADING
+   ========================================================================== */
+function loop(now){
+  try {
+    if (SIM) simTick(now);
+    else if (!PROBE) reapStale();
+    frame(now); drawHud(now);
+  } catch (e){ if (!window.__loopErr){ window.__loopErr = String(e && e.message || e); console.error(e); } }
+  requestAnimationFrame(loop);
+}
+const KEYS = {
+  ArrowRight: () => nav(1), PageDown: () => nav(1), ' ': () => nav(1), ArrowLeft: () => nav(-1), PageUp: () => nav(-1),
+  Home: () => showSlide(0, -1), End: () => DECK && showSlide(DECK.slides.length - 1, 1),
+  e: () => { V.eT = V.eT > .5 ? 0 : 1; if (V.focus) unfocus(); }, r: resetSlide,
+  o: () => toggleClean(), n: () => toggleNotes(), f: () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(),
+  c: () => { VIEW.cam++; saveView(); applyView(); toast(`CAMERA ${Math.round(CAM_LEVELS[VIEW.cam % 4] * 100)}%`); },
+  g: () => { VIEW.glass++; saveView(); applyView(); toast(`GLASS ${Math.round(GLASS_LEVELS[VIEW.glass % 4] * 100)}%`); },
+  l: () => { VIEW.layout++; saveView(); applyView(); toast(LAYOUTS[VIEW.layout % LAYOUTS.length].name); },
+  h: () => camOn ? stopCamera() : startCamera(), '?': () => document.body.classList.toggle('nolegend'), Escape: () => { if (V.focus) unfocus(); else if (document.body.classList.contains('clean')) toggleClean(); },
+};
+addEventListener('keydown', (e) => {
+  if (e.target && e.target.tagName === 'SELECT') return;
+  const f = KEYS[e.key] || KEYS[e.key.toLowerCase && e.key.toLowerCase()];
+  if (f && !e.metaKey && !e.ctrlKey && !e.altKey){ e.preventDefault(); f(); }
+});
+function toggleClean(){ const on = document.body.classList.toggle('clean'); $('cleanBtn').classList.toggle('off', !on);
+  const h = $('hint'); h.textContent = on ? 'MEETING VIEW · press O or ESC to bring the controls back' : '';
+  h.classList.toggle('show', on); clearTimeout(h._t); h._t = setTimeout(() => h.classList.remove('show'), 2200); }
+function toggleNotes(){ const on = document.body.classList.toggle('shownotes'); $('notesBtn').classList.toggle('off', !on); }
+$('cleanBtn').onclick = toggleClean; $('notesBtn').onclick = toggleNotes;
+$('camBtn').onclick = () => camOn ? stopCamera() : startCamera();
+// mouse: drag a piece out · drag empty space to turn · wheel = pull apart · double-click = reset
+stage.addEventListener('pointerdown', (e) => { stage.setPointerCapture(e.pointerId); begin('m', e.clientX, e.clientY); });
+stage.addEventListener('pointermove', (e) => { if (PT.m) move('m', e.clientX, e.clientY);
+  else { const h = V.focus ? null : pieceAt(e.clientX, e.clientY);
+    if (h !== mouseHover){ if (mouseHover) mouseHover.w.classList.remove('hover'); if (h) h.w.classList.add('hover'); mouseHover = h; } } });
+stage.addEventListener('pointerup', (e) => end('m', e.clientX, e.clientY));
+stage.addEventListener('wheel', (e) => { e.preventDefault(); if (V.focus) unfocus(); V.eT = clamp(V.eT + e.deltaY * .0016, 0, 1); }, { passive: false });
+stage.addEventListener('dblclick', resetSlide);
+let mouseHover = null;
+
+async function refreshDeckList(select){
+  let list = [];
+  try { list = await (await fetch('/api/decks')).json(); } catch (_){}
+  const sel = $('deckSel'); sel.innerHTML = '';
+  for (const d of list){ const o = el('option', null, sel); o.value = d.name; o.textContent = d.name.replace(/\.pptx$/i, ''); }
+  if (select) sel.value = select;
+  return list;
+}
+async function loadDeck(name, slide = 1){
+  statusEl.textContent = 'unpacking deck…';
+  const r = await fetch('/api/deck' + (name ? '?name=' + encodeURIComponent(name) : ''));
+  const data = await r.json();
+  if (!r.ok){ statusEl.textContent = data.error || 'could not load deck'; $('empty').style.display = 'flex'; return; }
+  for (const s of Object.values(SLIDES)) s.el.remove();
+  SLIDES = {}; DECK = data; DECK_NAME = data.name; cur = 0; trans = null;
+  $('empty').style.display = DECK.slides.length ? 'none' : 'flex';
+  $('deckSel').value = DECK_NAME;
+  layout(); showSlide(clamp(slide - 1, 0, DECK.slides.length - 1), 1, true);
+  statusEl.textContent = camOn ? 'hands live · on-device' : (SIM ? 'SIM · synthetic hands' : PROBE ? 'probe running…' : statusEl.textContent.replace('unpacking deck…', ''));
+  toast(`${DECK.name.replace(/\.pptx$/i, '')} · ${DECK.slides.length} slides`, 1500);
+}
+async function upload(file){
+  if (!file || !/\.pptx$/i.test(file.name)){ toast('ONLY .PPTX FILES', 1600); return; }
+  statusEl.textContent = `uploading ${file.name}…`;
+  const r = await fetch('/api/deck/upload?name=' + encodeURIComponent(file.name), { method: 'POST', body: file });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok){ statusEl.textContent = data.error || 'upload failed'; return; }
+  await refreshDeckList(data.name); await loadDeck(data.name);
+}
+$('loadBtn').onclick = () => $('file').click();
+$('file').onchange = (e) => upload(e.target.files[0]);
+$('deckSel').onchange = (e) => loadDeck(e.target.value);
+addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('dragging'); });
+addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+addEventListener('drop', (e) => { e.preventDefault(); document.body.classList.remove('dragging'); upload(e.dataTransfer.files[0]); });
+
+window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ return DECK; }, nav, showSlide, resetSlide };
+
+(async () => {
+  if (Q.has('clean')) document.body.classList.add('clean');
+  setTimeout(() => document.body.classList.add('nolegend'), 20000);   // the help steps aside once you know it (? brings it back)
+  applyView();
+  const want = Q.get('deck');
+  const list = await refreshDeckList(want);
+  if (!list.length){ $('empty').style.display = 'flex'; statusEl.textContent = 'no deck yet · drop a .pptx'; }
+  else await loadDeck(want && list.some(d => d.name === want) ? want : list[0].name, parseInt(Q.get('slide') || '1', 10) || 1);
+  requestAnimationFrame(loop);
+  if (SIM){ statusEl.textContent = 'SIM · synthetic hands'; $('camBtn').classList.add('off'); $('camBtn').textContent = 'SIM'; }
+  else if (PROBE){ $('camBtn').classList.add('off'); if (DECK) probe(); }
+  else startCamera();
+})();
+</script>
+</body></html>

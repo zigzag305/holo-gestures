@@ -23,6 +23,8 @@ git clone https://github.com/zubair-trabzada/holo-gestures.git ~/holo && cd ~/ho
 
 Then open **http://localhost:4890** in Chrome, allow the camera, and raise a hand. That's it.
 
+Presenting a PowerPoint? Open **http://localhost:4890/slides** instead — see *Slides mode* below.
+
 Python 3 is the only requirement (standard library only — nothing to `pip install`).
 
 > Already installed? Update with:
@@ -102,6 +104,65 @@ is a named constant near the top of `holo.html` (`PINCH_IN`, `PINCH_OUT`, `PINCH
 
 Change something, then run `?probe=1` and make sure it still says 26/26. That's the whole
 workflow.
+
+---
+
+## 🎤 Slides mode — present a PowerPoint with your hands (Teams · Zoom · Meet)
+
+Same server, second page: **http://localhost:4890/slides**
+
+Build your deck in PowerPoint like always. HOLO unpacks the `.pptx` into its real objects —
+every title, card, picture, table and chart becomes its own layer floating over your camera.
+Pull a slide apart in mid-air, grab one chart out of it, tap a number to blow it up.
+Charts aren't screenshots: they're **rebuilt live from the numbers stored inside the file**,
+so bars grow in and doughnut slices pop out when the slide comes apart.
+
+**Load a deck:** drop a `.pptx` anywhere on the page · or **LOAD .PPTX** · or put it in `decks/`
+(a sample 18-slide business review ships there). Point it at another folder with
+`{"decks": "/path/to/decks"}` in `holo.json`.
+
+| Do this | Get this |
+|---|---|
+| **Swipe** an open hand ← / → | next / previous slide |
+| **Two pinches**, pull apart | the slide comes apart into floating layers |
+| **Two pinches**, together | it rebuilds · **twist** = turn the hologram |
+| **Pinch** a piece | grab it out of the slide and move it |
+| …and **stretch with the other hand** | resize just that piece |
+| **Tap** (quick pinch) a piece | focus: it flies to the front, everything else dims · tap again = back |
+| **Point** (index finger) | red laser pointer for the audience |
+| Pinch empty space and drag | turn the slide in 3D |
+| **Peace ✌** held | reset the slide |
+
+Keys work too (presenter clickers send these): **← →** / PageUp / PageDown · **E** explode ·
+**R** reset · **O** meeting view (hides all controls) · **N** speaker notes · **C** camera
+brightness · **G** slide glass · **L** layout (slide left/right of you) · **F** fullscreen · **?** help.
+Mouse: drag pieces, drag empty space to turn, wheel to pull apart, double-click to reset.
+
+### Use it in a meeting (any app, via OBS Virtual Camera)
+
+1. Install **OBS Studio** (free).
+2. Open `http://localhost:4890/slides` in Chrome, press **O** (meeting view) and **F** (fullscreen),
+   or keep it as its own window.
+3. In OBS: **Sources → + → Window Capture** (macOS: *macOS Screen Capture → Window*) → pick that
+   Chrome window. Then **Start Virtual Camera**.
+4. In Teams / Zoom / Meet → camera settings → choose **OBS Virtual Camera**.
+
+Good to know:
+- HOLO uses your **real** webcam; the meeting app uses **OBS Virtual Camera**. If the meeting app
+  grabs the real webcam too, Windows may report it busy.
+- **Don't flip the video in OBS.** Your camera is mirrored on purpose so your hand lines up with
+  what you touch; the slide text is drawn separately and is never mirrored. (Your *own* self-view in
+  Teams may look flipped — the audience sees it the right way.)
+- Keep the HOLO window visible: Chrome slows down hand tracking in hidden windows.
+
+**What carries over from PowerPoint:** text and fonts, shapes, pictures, tables, native charts
+(bar, column, line, area, pie, doughnut — with their real data), groups, theme colours,
+speaker notes. **What doesn't:** PowerPoint's own animations and transitions (HOLO brings its own
+motion), SmartArt internals, embedded video, EMF/WMF pictures, table styles.
+
+Test it without a camera: `/slides?sim=1` plays a scripted demo with synthetic hands ·
+`/slides?probe=1` runs the gesture test battery (**16/16**) · `/slides?clean=1` opens in meeting view.
+Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
 
 ---
 
