@@ -255,6 +255,15 @@ def main():
             except subprocess.TimeoutExpired:
                 proc.kill()
     failed = [r for r in RESULTS if not r[1]]
+    if os.environ.get("GITHUB_ACTIONS"):                 # surface results on the pull request itself
+        for name, _, info in failed:
+            print(f"::error title=check failed: {name.strip()}::{info}")
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"### {len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed\n\n| | Check | Detail |\n|---|---|---|\n")
+                for name, ok, info in RESULTS:
+                    f.write(f"| {'✅' if ok else '❌'} | {name.strip()} | {info.replace('|', '/')} |\n")
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed in {time.time() - t0:.0f}s")
     if failed:
         print("FAILED: " + ", ".join(r[0].strip() for r in failed))
