@@ -677,6 +677,15 @@ async function probe(){
   // 13 ghost-free: one hand alone never explodes
   feed(20, k => [synthHand(lerp(.3, .7, k), .5, 'pinch')]); clear();
   ok('one-hand-no-explode', V.eT === 0, V.eT.toFixed(2));
+  // PINCH GATE: the synthetic pinch is far tighter than any threshold, so it can't catch a
+  // wrong PINCH_IN. Set the thumb-index gap directly: a quarter hand-span must pinch, a
+  // near-miss (between PINCH_IN and PINCH_OUT) must not.
+  const gap = (r) => { const h = synthHand(.5, .93, 'open'); const sp = Math.hypot(h[0].x - h[9].x, h[0].y - h[9].y);
+    h[4] = { x: h[8].x + sp * r, y: h[8].y }; return h; };
+  feed(6, () => [gap(.36)]); const near = HANDS[0].pinch; clear();
+  feed(6, () => [gap(.24)]); const real = HANDS[0].pinch; clear();
+  ok('pinch-gate', real && !near, `near-miss pinched=${near} · real pinched=${real}`);
+  if (V.focus) unfocus(); resetSlide();
   // 14 keyboard
   const b4 = cur; T += 1000; dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); ok('key-next', cur === b4 + 1);
   // 15 every slide of the deck renders without a frame error
