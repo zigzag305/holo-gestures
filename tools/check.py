@@ -156,7 +156,7 @@ def check_browser(base, deck_names, all_slides):
             report("holo probe battery", False, f"no result: {e}")
         loop_err = pg.evaluate("() => window.__loopErr || null")
         report("holo: no page errors", not pg.errors and not loop_err, "; ".join(pg.errors[:2]) or (loop_err or ""))
-        pg.screenshot(path=os.path.join(OUT, "holo.png"))
+        pg.screenshot(path=os.path.join(OUT, "holo-after-probe.png"))   # board state at the end of the battery
         pg.close()
 
         print("\nLinkPresent (linkpresent.html?probe=1)")
