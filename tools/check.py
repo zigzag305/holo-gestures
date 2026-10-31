@@ -12,6 +12,8 @@ What it does
   3. opens holo.html?probe=1 and linkpresent.html?probe=1 in headless Chromium and
      reads their scores, plus any page errors
   4. saves screenshots to state/check/ (normal, pulled apart, meeting view)
+  5. scores every slide against a LibreOffice reference (tools/fidelity.py) when LibreOffice
+     and Poppler are installed; the side-by-side report lands in state/fidelity/report.html
 
 Prints PASS/FAIL per check and exits 0 only if everything passed.
 
@@ -161,7 +163,8 @@ def check_browser(base, deck_names, all_slides):
 
         print("\nLinkPresent (linkpresent.html?probe=1)")
         pg = page()
-        pg.goto(base + "/linkpresent?probe=1")
+        # the battery's expectations (slide count, charts) are written for the sample deck
+        pg.goto(base + "/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx")
         try:
             pg.wait_for_function("() => window.__probe", timeout=90000)
             r = pg.evaluate("() => window.__probe")
@@ -202,10 +205,33 @@ def check_browser(base, deck_names, all_slides):
         print(f"  {shots + 1} images saved in {os.path.relpath(OUT, ROOT)}/ — look at them, a passing probe does not prove a slide looks right")
 
 
+# ---------------------------------------------------------------- 5. fidelity
+def check_fidelity(base, threshold):
+    print("\nFidelity vs a LibreOffice reference (tools/fidelity.py)")
+    import fidelity
+    miss = fidelity.tools_missing()
+    if miss:
+        print("  SKIP  needs " + ", ".join(miss) + " — install them to score slides (see tools/fidelity.py)")
+        return
+    rows = fidelity.run(base=base, threshold=threshold, log=lambda m: None)
+    by_deck = {}
+    for r in rows:
+        by_deck.setdefault(r[0], []).append(r)
+    for deck, rs in by_deck.items():
+        low = [r for r in rs if r[2] < threshold]
+        worst = min(rs, key=lambda r: r[2])
+        report(f"fidelity {deck}", not low,
+               f"mean {sum(r[2] for r in rs) / len(rs):.0%} · worst {worst[2]:.0%} (slide {worst[1]})"
+               + (f" · below {threshold:.0%}: slides " + ", ".join(str(r[1]) for r in low) if low else ""))
+    print("  report: state/fidelity/report.html — worst slides first")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--quick", action="store_true", help="skip the browser (parser + server routes only)")
     ap.add_argument("--all-slides", action="store_true", help="screenshot every slide, not a sample")
+    ap.add_argument("--no-fidelity", action="store_true", help="skip the slide-by-slide comparison with LibreOffice")
+    ap.add_argument("--fidelity-threshold", type=float, default=0.80, help="minimum match per slide (default 0.80)")
     a = ap.parse_args()
     t0 = time.time()
     decks = check_parser()
@@ -217,6 +243,8 @@ def main():
         check_routes(base, decks)
         if not a.quick:
             check_browser(base, decks, a.all_slides)
+            if not a.no_fidelity:
+                check_fidelity(base, a.fidelity_threshold)
     except Exception as e:  # noqa: BLE001
         report("run", False, str(e))
     finally:
@@ -227,6 +255,15 @@ def main():
             except subprocess.TimeoutExpired:
                 proc.kill()
     failed = [r for r in RESULTS if not r[1]]
+    if os.environ.get("GITHUB_ACTIONS"):                 # surface results on the pull request itself
+        for name, _, info in failed:
+            print(f"::error title=check failed: {name.strip()}::{info}")
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"### {len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed\n\n| | Check | Detail |\n|---|---|---|\n")
+                for name, ok, info in RESULTS:
+                    f.write(f"| {'✅' if ok else '❌'} | {name.strip()} | {info.replace('|', '/')} |\n")
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed in {time.time() - t0:.0f}s")
     if failed:
         print("FAILED: " + ", ".join(r[0].strip() for r in failed))

@@ -2,11 +2,17 @@
 
 export const el = (tag, cls, parent) => { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; };
 
-export const SERIF = /cambria|georgia|times|garamond|bookman|century|palatino|baskerville|didot|serif|caladea/i;
+export const SERIF = /cambria|georgia|times|garamond|bookman|century|palatino|baskerville|didot|serif|caladea|gelasio|tinos/i;
+/* metric-compatible stand-ins: same character widths, so lines wrap where PowerPoint wraps them
+   on machines without the Office fonts (Linux, CI) */
+const METRIC = { calibri: 'Carlito', cambria: 'Caladea', georgia: 'Gelasio', arial: '"Liberation Sans", Arimo',
+  'times new roman': '"Liberation Serif", Tinos', 'courier new': '"Liberation Mono", Cousine', helvetica: '"Liberation Sans", Arimo' };
 export function fontStack(f){
   const base = SERIF.test(f || '') ? 'Cambria, Caladea, Georgia, "Times New Roman", serif'
                                    : 'Calibri, Carlito, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
-  return f ? `"${f}", ${base}` : base;
+  if (!f) return base;
+  const alt = METRIC[f.toLowerCase()];
+  return `"${f}", ${alt ? alt + ', ' : ''}${base}`;
 }
 export function rgba(hex, a = 1){
   if (!hex) return 'transparent';

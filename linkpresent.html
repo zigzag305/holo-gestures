@@ -37,7 +37,8 @@
   /* ---------- live charts ---------- */
   .chart { position:absolute; inset:0; transform-style:preserve-3d; font-family:Calibri, Carlito, "Segoe UI", Arial, sans-serif; }
   .chart .ctitle { position:absolute; left:0; right:0; top:4px; text-align:center; }
-  .chart .legend { position:absolute; left:0; right:0; display:flex; justify-content:center; gap:16px; }
+  .chart .legend { position:absolute; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:4px 16px; }
+  .chart .legend span { white-space:nowrap; }
   .chart .legend i { display:inline-block; width:11px; height:11px; margin-right:6px; vertical-align:-1px; border-radius:2px; }
   .chart .bar { position:absolute; transform-style:preserve-3d; }
   .chart .bar .fill { position:absolute; inset:0; transform:scaleY(0); transform-origin:50% 100%;
@@ -52,6 +53,7 @@
   .chart.live .ln { stroke-dashoffset:0; }
   .chart .area { opacity:0; transition:opacity .9s .3s; }
   .chart.live .area { opacity:.22; }
+  .chart.live .area.solid { opacity:1; }
   .chart .dot { opacity:0; transition:opacity .3s; }
   .chart.live .dot { opacity:1; }
   .chart .pie { transform:scale(.55) rotate(-70deg); opacity:0; transition:transform .9s cubic-bezier(.2,.9,.25,1.08), opacity .5s; }
@@ -104,6 +106,13 @@
         font-family:"SF Mono",ui-monospace,monospace; font-size:14px; letter-spacing:.14em; line-height:2; color:#a9ffe6; }
   /* MEETING VIEW: what Teams / Zoom / Meet see through OBS — slide, you, your hands. No chrome. */
   body.clean #ui, body.clean #legend, body.clean #notes, body.clean #counter, body.clean #toast { display:none !important; }
+  /* RENDER (?render=1): the bare slide, flat and full-size, for tools/fidelity.py to compare with a reference */
+  body.render { background:#000; }
+  body.render #ui, body.render #legend, body.render #notes, body.render #counter, body.render #toast, body.render #hint,
+  body.render #hud, body.render #vignette, body.render #cam, body.render #empty { display:none !important; }
+  body.render .bgplate { box-shadow:none !important; }
+  body.render .bgplate > .inner { border-radius:0 !important; opacity:1 !important; }
+  body.render *, body.render *::before, body.render *::after { transition:none !important; animation:none !important; }
 </style></head><body>
 <video id="cam" autoplay playsinline muted></video>
 <div id="vignette"></div>
@@ -145,7 +154,7 @@ import { PINCH_IN, PINCH_OUT, PINCH_EARN, SPAN_MIN, AMP, handMetrics, oneEuro,
 import { el, rgba, fillCss } from '/js/lp-dom.js';
 import { renderPiece } from '/js/lp-render.js';
 const Q = new URLSearchParams(location.search);
-const SIM = Q.has('sim'), PROBE = Q.has('probe');
+const SIM = Q.has('sim'), PROBE = Q.has('probe'), RENDER = Q.has('render');
 const $ = (id) => document.getElementById(id);
 const stage = $('stage'), hud = $('hud'), cam = $('cam'), statusEl = $('status');
 const HX = hud.getContext('2d');
@@ -186,6 +195,7 @@ function layout(){
   const L = LAYOUTS[VIEW.layout % LAYOUTS.length];
   FIT = Math.min(W * L.frac / DECK.w, H * .8 / DECK.h);
   CX = W * L.cx; CY = H * .53;
+  if (RENDER){ FIT = Math.min(W / DECK.w, H / DECK.h); CX = W / 2; CY = H / 2; }
   stage.style.perspectiveOrigin = `${CX}px ${CY}px`;
 }
 function buildSlide(i){
@@ -197,7 +207,7 @@ function buildSlide(i){
   const plateWrap = el('div', 'piece locked bgplate', sEl);
   plateWrap.style.cssText = `left:0;top:0;width:${DECK.w}px;height:${DECK.h}px;`;
   const plate = el('div', 'inner', plateWrap);
-  plate.style.background = sd.bg.image ? `center/cover url("${sd.bg.image}")` : fillCss(sd.bg.grad ? { grad: sd.bg.grad, angle: sd.bg.angle } : { color: sd.bg.color });
+  plate.style.background = sd.bg.image ? `center/100% 100% url("${sd.bg.image}")` : fillCss(sd.bg.grad ? { grad: sd.bg.grad, angle: sd.bg.angle } : { color: sd.bg.color });
   plate.style.borderRadius = '6px';
   plate.style.opacity = GLASS_LEVELS[VIEW.glass % GLASS_LEVELS.length];
   const pieces = [{ d: { id: 'bg' + i, locked: true, x: 0, y: 0, w: DECK.w, h: DECK.h, kind: 'bg' }, w: plateWrap, inner: plate, bg: true }];
@@ -318,7 +328,7 @@ function frame(now){
     const st = p.st, m = .2;
     st.x = lerp(st.x, st.tx, m); st.y = lerp(st.y, st.ty, m); st.z = lerp(st.z, st.tz, m); st.s = lerp(st.s, st.ts, m); st.o = lerp(st.o, st.tO, .15);
     const delay = p.bg ? 0 : Math.min(60 + p.k * 30, 820);
-    const a = ease((now - s.shownAt - delay) / 560);
+    const a = RENDER ? 1 : ease((now - s.shownAt - delay) / 560);
     let ox = 0, oy = 0, oz;
     if (p.bg || p.d.locked) oz = -e * 110;
     else { ox = p.cx * .09 * e; oy = p.cy * .09 * e; oz = e * (60 + Math.min(p.rank, 1) * 400); if (p.rank > 1) oy += 30 * e; }
@@ -782,6 +792,7 @@ window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ retur
 
 (async () => {
   if (Q.has('clean')) document.body.classList.add('clean');
+  if (RENDER) document.body.classList.add('render');
   setTimeout(() => document.body.classList.add('nolegend'), 20000);   // the help steps aside once you know it (? brings it back)
   applyView();
   const want = Q.get('deck');
@@ -791,7 +802,8 @@ window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ retur
   requestAnimationFrame(loop);
   if (SIM){ statusEl.textContent = 'SIM · synthetic hands'; $('camBtn').classList.add('off'); $('camBtn').textContent = 'SIM'; }
   else if (PROBE){ $('camBtn').classList.add('off'); if (DECK) probe(); }
-  else startCamera();
+  else if (!RENDER) startCamera();
+  window.__ready = true;
 })();
 </script>
 </body></html>
