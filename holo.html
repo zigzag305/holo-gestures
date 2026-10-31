@@ -163,6 +163,8 @@
    Same engine drives real camera, ?sim=1 choreography, and the ?probe=1
    battery — amplified reach applies ONLY to real-camera input.
    ========================================================================== */
+import { dist, PINCH_IN, PINCH_OUT, PINCH_EARN, SPAN_MIN, AMP, handMetrics, oneEuro,
+         assignHands as assignSlots, readDetections, loadHandLandmarker, synthHand } from '/js/hands.js';
 const Q = new URLSearchParams(location.search);
 window.__lastErr = null;
 addEventListener('error', e => { if (!window.__lastErr) window.__lastErr = (e.message || '?') + ' @' + (e.lineno || '?'); });
@@ -180,7 +182,6 @@ sizeCanvases();
 
 /* ---------- landmark → screen: mirror + cover-crop + REACH AMPLIFICATION ---------- */
 const MAP = { sx: W, sy: H, ox: 0, oy: 0, id: true };
-const AMP = 1.45;      // a comfortable central hand zone reaches the whole screen (camera only)
 function updateMap(vw, vh){
   if (!vw || !vh){ MAP.sx = W; MAP.sy = H; MAP.ox = 0; MAP.oy = 0; MAP.id = true; return; }
   const s = Math.max(W / vw, H / vh);
@@ -362,71 +363,8 @@ function closeReader(){ reader.open = false; readerEl.style.display = 'none'; }
 readerEl.addEventListener('pointerdown', closeReader);
 
 /* ---------- gesture engine ---------- */
-const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
-/* field-tuned on the galaxy build 2026-08-26: a pinch means FINGERS TOUCHING (.22)
-   and must hold PINCH_EARN consecutive frames — near-pinches register nothing */
-const PINCH_IN = .30, PINCH_OUT = .42, PINCH_EARN = 2;   // relaxed 2026-08-30: .22 needed fingers literally touching; the original 'too sensitive' complaint was GHOST hands (now deduped), not this number
-function handMetrics(lm){
-  const span = Math.max(1e-4, dist(lm[0], lm[9]));
-  const curl = (i) => dist(lm[i], lm[0]) / span;
-  const tips = [curl(8), curl(12), curl(16), curl(20)];
-  return {
-    span,
-    tips,                                          // [index, middle, ring, pinky] extension ratios
-    pinch: dist(lm[4], lm[8]) / span,
-    open: tips.every(t => t > 1.45),
-    openish: tips.every(t => t > 1.32),   // relaxed real-hand open (parity with the galaxy build)
-    fist: tips.every(t => t < 1.05),
-    point: tips[0] > 1.45 && tips[1] < 1.15 && tips[2] < 1.15 && tips[3] < 1.15,
-    peace: tips[0] > 1.45 && tips[1] > 1.45 && tips[2] < 1.15 && tips[3] < 1.15,
-    palm: { x: (lm[0].x + lm[9].x)/2, y: (lm[0].y + lm[9].y)/2 },
-    tip: lm[8],                                   // the INDEX FINGERTIP is the cursor
-  };
-}
-/* HAND IDENTITY — the missing piece behind "nothing works" (2026-08-26 field frame:
-   no cursor on his raised hand, a ring parked on his shirt). MediaPipe returns hands
-   in ARBITRARY order that swaps between frames; positional assignment shreds a hand's
-   state (seen-counter, pinch, filter) on every swap, so the real hand never earns the
-   screen. Each detection now claims the slot whose last palm is NEAREST — state
-   survives, and a far-away stray can't steal a live hand's slot. */
-function assignHands(lms){
-  const out = [null, null];
-  const cand = lms.slice(0, 2);
-  const claimed = [false, false];
-  const palmPx = lm => px({ x: (lm[0].x + lm[9].x) / 2, y: (lm[0].y + lm[9].y) / 2 });
-  const order = [0, 1].filter(i => HANDS[i].present && HANDS[i].m)
-    .sort((a2, b2) => HANDS[b2].seen - HANDS[a2].seen);
-  for (const i of order){
-    const last = px(HANDS[i].m.palm);
-    let bi = -1, bd = 1e9;
-    cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
-      const p = palmPx(lm), d = Math.hypot(p.x - last.x, p.y - last.y);
-      if (d < bd){ bd = d; bi = k; } });
-    if (bi >= 0 && bd < 260){ out[i] = cand[bi]; claimed[bi] = true; }
-  }
-  cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
-    const slot = out[0] == null && !HANDS[0].present ? 0
-               : out[1] == null && !HANDS[1].present ? 1
-               : out[0] == null ? 0 : out[1] == null ? 1 : -1;
-    if (slot >= 0){ out[slot] = lm; claimed[k] = true; }
-  });
-  return out;
-}
-/* One Euro filter (Casiez et al.) — speed-adaptive cutoff: heavy smoothing when the
-   hand is still (no jitter), light smoothing when it moves fast (no lag). This is
-   what separates a floaty cursor from one that feels wired to the finger. */
-function oneEuro(st, raw, now){
-  const f = st.oe || (st.oe = { t: now, x: raw.x, y: raw.y, dx: 0, dy: 0 });
-  let dt = (now - f.t) / 1000; if (!(dt > 1/240)) dt = 1/60; if (dt > .2) dt = .2;  // sub-frame deltas = one camera frame
-  f.t = now;
-  const al = (cut) => { const r = 2 * Math.PI * cut * dt; return r / (r + 1); };
-  const ad = al(2.5);   // derivative cutoff: velocity estimate must build FAST or slow motions lag
-  f.dx += ((raw.x - f.x) / dt - f.dx) * ad;
-  f.dy += ((raw.y - f.y) / dt - f.dy) * ad;
-  const a = al(1.3 + .009 * Math.hypot(f.dx, f.dy));
-  f.x += (raw.x - f.x) * a; f.y += (raw.y - f.y) * a;
-  return { x: f.x, y: f.y };
-}
+// identity-stable slots: the shared engine needs this page's hand states and mapper
+const assignHands = (lms) => assignSlots(lms, HANDS, px);
 function mkHandState(){ return { present:false, seen:0, pinch:false, pinchT:0, startPalm:null,
   smooth:null, trail:[], open:false, openT:0, fist:false, lm:null, m:null, hover:null, twist:null,
   point:0, spans:[], upT:0 }; }
@@ -445,7 +383,6 @@ let ADV = Q.has('adv') || Q.has('probe');
 /* green-dot forensics: a PERSISTENT false detection (a face, a lamp) survives the
    6-frame render gate — so phantoms are killed at three layers instead:
    confidence floor .6 at the tracker, the span gate here, the stale watchdog below */
-const SPAN_MIN = .025;               // hands smaller than 2.5% of frame = background noise
 const RAW = { n: 0, scores: [] };    // what the tracker saw BEFORE filtering (DEBUG overlay)
 let lastPush = [-9e9, -9e9], lastTidy = -9e9, lastPalmD = null;
 /* diag phone-home: one merged object per page load, so a GL failure and the
@@ -1054,41 +991,19 @@ async function startCamera(){
   camStarting = true;
   statusEl.textContent = 'loading hand tracking…';
   if (!landmarker){
-    // SELF-HOSTED first (no CDN in the path — ad-block extensions and offline can't
-    // kill it, the 2026-08-21 field failure); public CDN only as the fallback
-    let stage = 'import', localErr = null;
+    let localErr = null;
     try {
-      let mp = null, wasmDir = '/vendor/wasm', model = '/vendor/hand_landmarker.task';
-      try { mp = await import('/vendor/vision_bundle.mjs'); }
-      catch (le){
-        localErr = (le && (le.message || String(le)) || '?').slice(0, 300);
-        console.error('[holo] local bundle import failed:', le);
-        mp = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1');
-        wasmDir = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
-        model = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-      }
-      stage = 'wasm';
-      statusEl.textContent = 'tracking core loaded · initializing…';
-      const files = await mp.FilesetResolver.forVisionTasks(wasmDir);
-      stage = 'model';
-      // confidence floors raised off the loose .5 defaults: a face or a shirt fold
-      // that scores .5-.6 as a "hand" is exactly the parked-green-dot phantom
-      const opts = (d) => ({ baseOptions: { modelAssetPath: model, delegate: d },
-                             runningMode: 'VIDEO', numHands: 2,
-                             minHandDetectionConfidence: .6,
-                             minHandPresenceConfidence: .6,
-                             minTrackingConfidence: .6 });
-      try { landmarker = await mp.HandLandmarker.createFromOptions(files, opts('GPU')); DELEGATE = 'GPU'; }
-      catch (ge){ console.error('[holo] GPU delegate failed, trying CPU:', ge);
-        landmarker = await mp.HandLandmarker.createFromOptions(files, opts('CPU')); DELEGATE = 'CPU'; }
+      const r = await loadHandLandmarker(st => { if (st === 'wasm') statusEl.textContent = 'tracking core loaded · initializing…'; });
+      landmarker = r.landmarker; DELEGATE = r.delegate; localErr = r.localImportError;
     } catch (e) {
       camStarting = false;
+      const stage = e.stage || '?';
       console.error('[holo] tracking init failed at stage', stage, e);
       const msg = (e && (e.message || String(e)) || 'unknown').slice(0, 110);
       statusEl.textContent = `tracking failed @${stage}: ${msg} · RETRY`;
       postDiag({ fail: stage, error: (e && (e.message || String(e)) || '?').slice(0, 300),
              name: e && e.name, stack: (e && e.stack || '').slice(0, 600),
-             localImportError: localErr, ua: navigator.userAgent,
+             localImportError: e.localImportError, ua: navigator.userAgent,
              gpu: !!window.WebGLRenderingContext, win: [W, H] });
       return;
     }
@@ -1118,48 +1033,9 @@ async function startCamera(){
       lastVideoT = cam.currentTime;
       updateMap(cam.videoWidth, cam.videoHeight);
       const res = landmarker.detectForVideo(cam, performance.now());
-      const hd = res.handednesses || res.handedness || [];
-      RAW.n = (res.landmarks || []).length;                       // pre-filter truth for DEBUG
-      RAW.scores = hd.map(h => (h && h[0] && h[0].score) ?? 1);
-      // NOTE the semantics: handednesses[].score is the LEFT-vs-RIGHT classifier
-      // confidence, NOT detection quality. A palm-forward spread hand (how every
-      // gesture starts) is chirality-AMBIGUOUS and scores ~.5-.7 — the old .8 gate
-      // was throwing away his REAL hand while confident phantoms survived. Detection
-      // quality is enforced at the tracker (minHandDetection/Presence/Tracking .6);
-      // this stays only as a .5 sanity floor.
-      let pair = (res.landmarks || []).map((lm, i) => ({ lm, s: RAW.scores[i] ?? 1 }))
-        .filter(p2 => p2.s > .5);
-      // GHOST-HAND DEDUPE: MediaPipe often reports ONE physical hand as TWO overlapping
-      // detections, and the ghost paints a second cursor shadowing the finger (his
-      // "green things following my fingers"). Two palms closer than ~1.35 hand-spans
-      // are the same hand — keep the higher-confidence read.
-      RAW.ghost = false;
-      // NEVER dedupe two ESTABLISHED hands — a clap is two real palms rushing inside
-      // ghost distance, and merging them killed the clap (2026-08-28). Ghosts are a
-      // NEW detection born beside one live hand, not a long-tracked pair.
-      const twoLive = HANDS[0].present && HANDS[0].seen > 4 && HANDS[1].present && HANDS[1].seen > 4;
-      if (pair.length === 2){
-        const P2 = p2 => ({ x: (p2.lm[0].x + p2.lm[9].x)/2, y: (p2.lm[0].y + p2.lm[9].y)/2 });
-        const S2 = p2 => Math.hypot(p2.lm[0].x - p2.lm[9].x, p2.lm[0].y - p2.lm[9].y);
-        const dd = Math.hypot(P2(pair[0]).x - P2(pair[1]).x, P2(pair[0]).y - P2(pair[1]).y);
-        // GHOST vs CLAP (2026-08-30 regression fix): when the two detections are NOT
-        // two long-established hands, a neighbour within 1.35 spans is a GHOST DUPLICATE
-        // — merge it. Dropping this to .7 (to save the clap) let ghosts survive as a
-        // second hand, and a ghost of a PINCHING hand fires two-hand world zoom/rotate,
-        // which throws every card across the screen. Established pairs (a clap) still
-        // never merge until they truly overlap.
-        if (dd < Math.max(S2(pair[0]), S2(pair[1])) * (twoLive ? .5 : 1.35)){
-          pair = [pair[0].s >= pair[1].s ? pair[0] : pair[1]];
-          RAW.ghost = true;
-        }
-        // shirt/face phantom: a second detection that is BOTH much smaller and lower
-        // confidence than the live hand is background noise, not a second hand
-        else {
-          const [big, small] = S2(pair[0]) >= S2(pair[1]) ? [pair[0], pair[1]] : [pair[1], pair[0]];
-          if (S2(small) < S2(big) * .55 && small.s < .9){ pair = [big]; RAW.ghost = true; }
-        }
-      }
-      ingestHands(assignHands(pair.map(p2 => p2.lm)));   // identity-stable slots (camera path only —
+      const det = readDetections(res, HANDS);                    // score floor + ghost/phantom dedupe
+      RAW.n = det.n; RAW.scores = det.scores; RAW.ghost = det.ghost;   // pre-filter truth for DEBUG
+      ingestHands(assignHands(det.lms));   // identity-stable slots (camera path only —
                                                          // probe/sim stay positional by design)
     }
     requestAnimationFrame(tick); };
@@ -1168,27 +1044,6 @@ async function startCamera(){
 startCamera();
 
 /* ---------- SIM mode ---------- */
-function synthHand(x, y, pose, scale){
-  const lm = []; const s = scale || .09;
-  const spread = pose === 'open' ? 1.0 : pose === 'fist' ? .38 : .78;
-  lm[0] = { x, y: y + s*.9 };
-  lm[9] = { x, y: y - s*.1 };
-  lm[1]={x:x-s*.35,y:y+s*.55}; lm[2]={x:x-s*.5,y:y+s*.3}; lm[3]={x:x-s*.55,y:y+s*.1};
-  lm[5]={x:x-s*.3,y:y-s*.15}; lm[13]={x:x+s*.15,y:y-s*.15}; lm[17]={x:x+s*.32,y:y-s*.1};
-  const tipY = y - s * (pose === 'fist' ? .35 : 1.05) * spread;
-  lm[8] = { x: pose === 'pinch' ? x - s*.18 : pose === 'point' ? x - s*.28 : x - s*.28*spread,
-            y: pose === 'pinch' ? y - s*.5  : pose === 'point' ? y - s*1.05 : tipY };
-  lm[4] = { x: pose === 'pinch' ? x - s*.16 : x - s*.62*spread, y: pose === 'pinch' ? y - s*.48 : y + s*.05 };
-  const curlY = y - s*.133;                      // fist-height fingertips for the POINT pose
-  lm[12]={ x: x - s*.05, y: pose === 'point' ? curlY : tipY };
-  lm[16]={ x: x + s*.16, y: ((pose === 'point' || pose === 'peace') ? curlY : tipY) + s*.06 };
-  lm[20]={ x: x + s*.3,  y: ((pose === 'point' || pose === 'peace') ? curlY : tipY) + s*.14 };
-  for (const [a,b,i] of [[5,8,6],[5,8,7],[9,12,10],[9,12,11],[13,16,14],[13,16,15],[17,20,18],[17,20,19]]){
-    const p = lm[a], q = lm[b], k = (i % 2 ? .66 : .33);
-    lm[i] = { x: p.x + (q.x-p.x)*k, y: p.y + (q.y-p.y)*k };
-  }
-  return lm;
-}
 const lerp = (a, b, k) => a + (b - a) * k;
 function segPinchDrag(x0,y0,x1,y1){ return t => synthHand(lerp(x0,x1,t), lerp(y0,y1,t), t < .08 ? 'open' : 'pinch'); }
 const tapAt = (x, y) => [
@@ -1503,12 +1358,16 @@ if (Q.has('probe')) setTimeout(async () => {
     // wait for the async re-seed, then drive ONE physics tick directly: headless
     // stops delivering rAF frames late in a long battery, so relying on the loop
     // here tests the harness, not the deck
-    let orbEls = [], allPlaced = false;
-    for (let w = 0; w < 40 && !allPlaced; w++){
+    // ALSO wait for the re-seed itself: the OLD orbs are already placed, so polling on
+    // placement alone could pass before /api/tree answered — the note cards were still
+    // up and the check failed about half the time (2026-10-31, same rate on main)
+    let orbEls = [], allPlaced = false, reseeded = false;
+    for (let w = 0; w < 40 && !(allPlaced && reseeded); w++){
       physics();
       orbEls = [...document.querySelectorAll('.orb')];
       allPlaced = orbEls.length > 0 && orbEls.every(e => /translate3d/.test(e.style.transform || ''));
-      if (!allPlaced) await new Promise(r => setTimeout(r, 80));
+      reseeded = !CARDS.some(cc => cc.kind === 'note');
+      if (!(allPlaced && reseeded)) await new Promise(r => setTimeout(r, 80));
     }
     ok('peace' + (allPlaced ? '' : '-p' + orbEls.filter(e => /translate3d/.test(e.style.transform || '')).length + 'of' + orbEls.length + '-conn' + CARDS.filter(c=>c.kind==='folder'&&c.el&&c.el.isConnected).length + '-xf' + CARDS.filter(c=>c.kind==='folder'&&c.el&&/translate3d/.test(c.el.style.transform||'')).length + '-deck' + (document.getElementById('deck')?document.getElementById('deck').children.length:-1)) + (lastRestore > r0 ? '' : '-NORESTORE'),
       lastRestore > r0 && CARDS.every(cc => !cc.docked) &&
