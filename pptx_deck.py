@@ -224,8 +224,13 @@ def line_of(sppr, ctx):
     if not c:
         return None
     dash = ln.find("a:prstDash", NS)
-    return {"color": c, "alpha": a, "w": round(max(0.75, int(ln.get("w", "9525")) / EMU_PX), 2),
-            "dash": dash.get("val") if dash is not None and dash.get("val") != "solid" else None}
+    out = {"color": c, "alpha": a, "w": round(max(0.75, int(ln.get("w", "9525")) / EMU_PX), 2),
+           "dash": dash.get("val") if dash is not None and dash.get("val") != "solid" else None}
+    for end in ("headEnd", "tailEnd"):
+        e = ln.find("a:" + end, NS)
+        if e is not None and e.get("type", "none") != "none":
+            out[end] = e.get("type")
+    return out
 
 
 # ---------------------------------------------------------------- text
@@ -255,12 +260,28 @@ def _ppr_into(pp, out, ctx):
         out["indent"] = px(pp.get("indent"))
     if pp.find("a:buNone", NS) is not None:
         out["bullet"] = None
+    bf = pp.find("a:buFont", NS)
+    if bf is not None and bf.get("typeface"):
+        out["buFont"] = bf.get("typeface")
     bc = pp.find("a:buChar", NS)
     if bc is not None:
-        out["bullet"] = bc.get("char", "•")
+        ch = bc.get("char", "•")
+        if "wingdings" in (out.get("buFont") or "").lower() or "symbol" == (out.get("buFont") or "").lower():
+            ch = WINGDINGS.get(ch, "•")
+        out["bullet"] = ch
     ba = pp.find("a:buAutoNum", NS)
     if ba is not None:
         out["bullet"] = "#"
+        out["autoNum"] = ba.get("type", "arabicPeriod")
+        out["startAt"] = int(ba.get("startAt", "1"))
+    bclr = pp.find("a:buClr", NS)
+    if bclr is not None:
+        c, _ = color_of(bclr, ctx)
+        if c:
+            out["buColor"] = c
+    bsz = pp.find("a:buSzPct", NS)
+    if bsz is not None:
+        out["buSize"] = int(bsz.get("val", "100000")) / 100000.0
     sa = pp.find("a:spcAft/a:spcPts", NS)
     if sa is not None:
         out["spaceAfter"] = round(int(sa.get("val", "0")) / 100.0 * PT_PX, 1)
@@ -299,26 +320,66 @@ def _rpr_into(r, out, ctx):
 
 
 RUN_KEYS = ("size", "b", "i", "u", "spacing", "caps", "color", "alpha", "font")
-PARA_KEYS = ("align", "marL", "indent", "bullet", "spaceAfter", "spaceBefore", "lineSpacing")
+PARA_KEYS = ("align", "marL", "indent", "bullet", "spaceAfter", "spaceBefore", "lineSpacing", "buColor", "buSize")
+# bullet glyphs PowerPoint draws from symbol fonts, mapped to Unicode
+WINGDINGS = {"§": "■", "Ø": "➢", "ü": "✓", "q": "❑", "n": "■", "l": "●", "v": "❖", "Ü": "➔", "à": "➔", "o": "□", "Ÿ": "•", "·": "•"}
 
 
-def text_of(txbody, ctx, inherit_chain, slide_no=None):
-    """inherit_chain: list of lstStyle-like elements, lowest priority first."""
+def autonum(scheme, n):
+    """PowerPoint auto-numbering (a:buAutoNum type) for item n (1-based)."""
+    def alpha(k):
+        out = ""
+        while k > 0:
+            k, r = divmod(k - 1, 26)
+            out = chr(97 + r) + out
+        return out
+    def roman(k):
+        vals = [(1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"), (50, "l"), (40, "xl"), (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")]
+        out = ""
+        for v, sym in vals:
+            while k >= v:
+                out += sym; k -= v
+        return out
+    body = (alpha(n) if scheme.startswith("alphaLc") else alpha(n).upper() if scheme.startswith("alphaUc")
+            else roman(n) if scheme.startswith("romanLc") else roman(n).upper() if scheme.startswith("romanUc") else str(n))
+    if scheme.endswith("ParenBoth"):
+        return "(%s)" % body
+    if scheme.endswith("ParenR"):
+        return body + ")"
+    if scheme.endswith("Plain"):
+        return body
+    if scheme.endswith("Minus"):
+        return body + " -"
+    return body + "."
+
+
+def text_of(txbody, ctx, inherit_chain, slide_no=None, body_chain=()):
+    """inherit_chain: lstStyle-like elements, lowest priority first.
+    body_chain: bodyPr elements of the master/layout placeholders this text inherits from
+    (anchor, insets, wrap, vertical text, columns, autofit), lowest priority first."""
     if txbody is None:
         return None
-    bp = txbody.find("a:bodyPr", NS)
-    ins = [91440, 45720, 91440, 45720]
-    anchor = "t"
-    wrap = True
-    if bp is not None:
-        ins = [int(bp.get(k, d)) for k, d in (("lIns", 91440), ("tIns", 45720), ("rIns", 91440), ("bIns", 45720))]
-        anchor = bp.get("anchor", "t")
-        wrap = bp.get("wrap", "square") != "none"
+    attrs = {}
+    autofit = None
+    for b in list(body_chain) + [txbody.find("a:bodyPr", NS)]:
+        if b is None:
+            continue
+        attrs.update(b.attrib)
+        na = b.find("a:normAutofit", NS)
+        if na is not None:
+            autofit = na
+        elif b.find("a:noAutofit", NS) is not None or b.find("a:spAutoFit", NS) is not None:
+            autofit = None
+    ins = [int(attrs.get(k, d)) for k, d in (("lIns", 91440), ("tIns", 45720), ("rIns", 91440), ("bIns", 45720))]
+    anchor = attrs.get("anchor", "t")
+    wrap = attrs.get("wrap", "square") != "none"
+    scale = int(autofit.get("fontScale", "100000")) / 100000.0 if autofit is not None else 1.0
+    lnred = int(autofit.get("lnSpcReduction", "0")) / 100000.0 if autofit is not None else 0.0
+    counters = {}
     own_lst = txbody.find("a:lstStyle", NS)
     chain = list(inherit_chain) + [own_lst]
     paras = []
     has_text = False
-    auto_n = 0
     for p in txbody.findall("a:p", NS):
         ppr = p.find("a:pPr", NS)
         lvl = int(ppr.get("lvl", "0")) + 1 if ppr is not None else 1
@@ -354,13 +415,33 @@ def text_of(txbody, ctx, inherit_chain, slide_no=None):
             para["empty"] = rp["size"]
         else:
             if para.get("bullet") == "#":
-                auto_n += 1
-                para["bullet"] = "%d." % auto_n
+                key = (lvl, base.get("autoNum"))
+                counters[key] = counters.get(key, base.get("startAt", 1) - 1) + 1
+                para["bullet"] = autonum(base.get("autoNum", "arabicPeriod"), counters[key])
+            else:
+                for k in [k for k in counters if k[0] >= lvl]:
+                    del counters[k]                     # a plain paragraph ends the numbered list
+        if scale != 1.0 or lnred:
+            for r in runs:
+                if r.get("size"):
+                    r["size"] = round(r["size"] * scale, 2)
+            if para.get("empty"):
+                para["empty"] = round(para["empty"] * scale, 2)
+            for k in ("spaceAfter", "spaceBefore"):
+                if para.get(k):
+                    para[k] = round(para[k] * scale, 1)
+            para["lineSpacing"] = round((para.get("lineSpacing") or 1.0) - lnred, 3)
         para["runs"] = runs
         paras.append(para)
     if not has_text:
         return None
-    return {"anchor": anchor, "wrap": wrap, "insets": [round(v / EMU_PX, 1) for v in ins], "paras": paras}
+    out = {"anchor": anchor, "wrap": wrap, "insets": [round(v / EMU_PX, 1) for v in ins], "paras": paras}
+    if attrs.get("vert") and attrs["vert"] != "horz":
+        out["vert"] = attrs["vert"]
+    if int(attrs.get("numCol", "1")) > 1:
+        out["cols"] = int(attrs["numCol"])
+        out["colGap"] = px(attrs.get("spcCol", "0"))
+    return out
 
 
 # ---------------------------------------------------------------- charts
@@ -393,17 +474,21 @@ def _first_text(el):
     return v.text if v is not None and v.text else ""
 
 
-def _txpr_style(el, ctx):
+def _txpr_style(el, ctx, direct=False):
     out = {}
     if el is None:
         return out
-    d = el.find(".//c:txPr//a:defRPr", NS)
+    d = el.find("c:txPr/a:p/a:pPr/a:defRPr", NS) if direct else el.find(".//c:txPr//a:defRPr", NS)
     if d is not None:
         _rpr_into(d, out, ctx)
     return out
 
 
 def parse_chart(pkg, part, ctx):
+    """A native chart → {type, series[], axes, legend, title, labels, textStyle}.
+    Several plots in one chart (a combo: columns + a line on a second axis) come back as one
+    series list where each series carries its own `kind` and `secondary` flag; `type` is the
+    first plot's kind."""
     root = pkg.xml(part)
     if root is None:
         return None
@@ -412,37 +497,52 @@ def parse_chart(pkg, part, ctx):
     if pa is None:
         return None
     kinds = {"barChart": "bar", "bar3DChart": "bar", "lineChart": "line", "line3DChart": "line",
-             "pieChart": "pie", "pie3DChart": "pie", "doughnutChart": "doughnut", "areaChart": "area",
-             "area3DChart": "area", "scatterChart": "line", "radarChart": "line"}
-    plot = None
-    for ch in pa:
-        k = ch.tag.split("}")[1]
-        if k in kinds:
-            plot, kind = ch, kinds[k]
-            break
-    if plot is None:
+             "pieChart": "pie", "pie3DChart": "pie", "ofPieChart": "pie", "doughnutChart": "doughnut",
+             "areaChart": "area", "area3DChart": "area", "scatterChart": "scatter", "radarChart": "line",
+             "bubbleChart": "scatter", "stockChart": "line"}
+    plots = [(ch, kinds[ch.tag.split("}")[1]]) for ch in pa if ch.tag.split("}")[1] in kinds]
+    if not plots:
         return None
-    out = {"type": kind}
-    if kind == "bar":
-        bd = plot.find("c:barDir", NS)
-        out["barDir"] = bd.get("val") if bd is not None else "col"
-        gp = plot.find("c:grouping", NS)
-        out["grouping"] = gp.get("val") if gp is not None else "clustered"
-        gw = plot.find("c:gapWidth", NS)
-        out["gap"] = int(gw.get("val", "150")) / 100.0 if gw is not None else 1.5
-    if kind == "doughnut":
-        hs = plot.find("c:holeSize", NS)
-        out["hole"] = int(hs.get("val", "50")) / 100.0 if hs is not None else .5
-    # title
-    t = chart.find("c:title", NS)
-    atd = chart.find("c:autoTitleDeleted", NS)
-    if t is not None and not (atd is not None and atd.get("val") == "1"):
-        out["title"] = _first_text(t.find("c:tx", NS)) or None
-        st = {}
-        rp = _first_found(t, ".//a:rPr", ".//a:defRPr")
-        _rpr_into(rp, st, ctx)
-        out["titleStyle"] = st
-    # data labels (plot-level, then series-level overrides)
+    out = {"type": plots[0][1]}
+    base = _txpr_style(root, ctx, direct=True)          # chart-wide default text (chartSpace/c:txPr)
+    if base:
+        out["textStyle"] = base
+
+    # axes by id: the first plot's value axis is primary, any other is secondary
+    axes = {}
+    for ax in pa:
+        tag = ax.tag.split("}")[1]
+        if tag in ("valAx", "catAx", "dateAx", "serAx"):
+            axes[ax.find("c:axId", NS).get("val")] = (tag, ax)
+    def axis_info(ax):
+        de = ax.find("c:delete", NS)
+        info = {"hidden": de is not None and de.get("val") == "1"}
+        for k in ("min", "max"):
+            e = ax.find("c:scaling/c:" + k, NS)
+            if e is not None:
+                info[k] = float(e.get("val"))
+        o = ax.find("c:scaling/c:orientation", NS)
+        if o is not None and o.get("val") == "maxMin":
+            info["reverse"] = True
+        mu = ax.find("c:majorUnit", NS)
+        if mu is not None:
+            info["step"] = float(mu.get("val"))
+        info["style"] = _txpr_style(ax, ctx)
+        info["grid"] = ax.find("c:majorGridlines", NS) is not None
+        ap = ax.find("c:axPos", NS)
+        info["pos"] = ap.get("val") if ap is not None else None
+        nf = ax.find("c:numFmt", NS)
+        if nf is not None and nf.get("formatCode") not in (None, "General"):
+            info["fmt"] = nf.get("formatCode")
+        tl = ax.find("c:tickLblPos", NS)
+        if tl is not None and tl.get("val") == "none":
+            info["noLabels"] = True
+        t = ax.find("c:title", NS)
+        if t is not None:
+            info["title"] = _first_text(t.find("c:tx", NS)) or None
+        return info
+    primary_val = None
+
     def dl_flags(dl, into):
         if dl is None:
             return
@@ -469,70 +569,135 @@ def parse_chart(pkg, part, ctx):
             nf = pts[0].find("c:numFmt", NS)
             if nf is not None and nf.get("formatCode") not in (None, "General"):
                 into["fmt"] = nf.get("formatCode")
-    labels = {}
-    dl_flags(plot.find("c:dLbls", NS), labels)
-    series = []
-    for i, s in enumerate(plot.findall("c:ser", NS)):
-        name = _first_text(s.find("c:tx", NS)) or ("Series %d" % (i + 1))
-        cat_el = _first_found(s, "c:cat", "c:xVal")
-        val_el = _first_found(s, "c:val", "c:yVal")
-        cats = _cache_vals(cat_el)
-        raw = _cache_vals(val_el)
-        vals = []
-        for v in raw:
-            try:
-                vals.append(float(v))
-            except ValueError:
-                vals.append(None)
-        fmt_code = None
-        if val_el is not None:
-            fc = val_el.find(".//c:formatCode", NS)
-            fmt_code = fc.text if fc is not None else None
-        sppr = s.find("c:spPr", NS)
-        f = fill_of(sppr, ctx)
-        col = f.get("color") if f and not f.get("none") else None
-        if not col and sppr is not None:
-            ln = line_of(sppr, ctx)
-            col = ln["color"] if ln else None
-        pcols = {}
-        for dpt in s.findall("c:dPt", NS):
-            idx = int(dpt.find("c:idx", NS).get("val", "0"))
-            ff = fill_of(dpt.find("c:spPr", NS), ctx)
-            if ff and ff.get("color"):
-                pcols[idx] = ff["color"]
-        sl = dict(labels)
-        dl_flags(s.find("c:dLbls", NS), sl)
-        series.append({"name": name, "cats": cats, "vals": vals, "color": col,
-                       "pointColors": [pcols.get(j) for j in range(len(vals))] if pcols else None,
-                       "fmt": sl.get("fmt") or (fmt_code if fmt_code and fmt_code != "General" else None),
-                       "labels": sl})
+
+    series, labels = [], {}
+    for pi, (plot, kind) in enumerate(plots):
+        ids = [e.get("val") for e in plot.findall("c:axId", NS)]
+        vals_ax = [axes[i] for i in ids if i in axes and axes[i][0] == "valAx"]
+        secondary = False
+        if vals_ax:
+            vid = id(vals_ax[0][1])
+            if primary_val is None:
+                primary_val = vals_ax[-1][1] if kind == "scatter" else vals_ax[0][1]
+            secondary = vals_ax[0][1] is not primary_val and kind != "scatter"
+        pl = {}
+        dl_flags(plot.find("c:dLbls", NS), pl)
+        if pi == 0:
+            labels = pl
+            if kind == "bar":
+                bd = plot.find("c:barDir", NS)
+                out["barDir"] = bd.get("val") if bd is not None else "col"
+                gp = plot.find("c:grouping", NS)
+                out["grouping"] = gp.get("val") if gp is not None else "clustered"
+                gw = plot.find("c:gapWidth", NS)
+                out["gap"] = int(gw.get("val", "150")) / 100.0 if gw is not None else 1.5
+            if kind == "doughnut":
+                hs = plot.find("c:holeSize", NS)
+                out["hole"] = int(hs.get("val", "50")) / 100.0 if hs is not None else .5
+            if kind in ("line", "area") and plot.find("c:grouping", NS) is not None:
+                out["grouping"] = plot.find("c:grouping", NS).get("val")
+        vc = plot.find("c:varyColors", NS)
+        vary = (vc.get("val", "1") != "0") if vc is not None else kind in ("pie", "doughnut")
+        pmark = plot.find("c:marker", NS)
+        plot_markers = pmark is None or pmark.get("val", "1") != "0"
+        style = plot.find("c:scatterStyle", NS)
+        for s in plot.findall("c:ser", NS):
+            idx = int(s.find("c:idx", NS).get("val", str(len(series)))) if s.find("c:idx", NS) is not None else len(series)
+            name = _first_text(s.find("c:tx", NS)) or ("Series %d" % (len(series) + 1))
+            cat_el = s.find("c:cat", NS)
+            x_el = s.find("c:xVal", NS)
+            val_el = _first_found(s, "c:val", "c:yVal")
+            cats = _cache_vals(cat_el if cat_el is not None else x_el)
+            vals = [_num(v) for v in _cache_vals(val_el)]
+            fmt_code = None
+            if val_el is not None:
+                fc = val_el.find(".//c:formatCode", NS)
+                fmt_code = fc.text if fc is not None else None
+            sppr = s.find("c:spPr", NS)
+            f = fill_of(sppr, ctx)
+            col = f.get("color") if f and not f.get("none") else None
+            ln = sppr.find("a:ln", NS) if sppr is not None else None
+            line_hidden = ln is not None and ln.find("a:noFill", NS) is not None
+            width = None
+            if kind in ("line", "scatter") and sppr is not None:
+                lo = line_of(sppr, ctx)
+                if lo:
+                    col = lo["color"]
+                lnw = sppr.find("a:ln", NS)
+                if lnw is not None and lnw.get("w"):
+                    width = round(int(lnw.get("w")) / EMU_PX, 2)
+            if not col:                           # PowerPoint's default: the theme's accents in turn
+                col = "#" + ctx.scheme("accent%d" % (idx % 6 + 1)).lstrip("#")
+            pcols = {}
+            for dpt in s.findall("c:dPt", NS):
+                j = int(dpt.find("c:idx", NS).get("val", "0"))
+                ff = fill_of(dpt.find("c:spPr", NS), ctx)
+                if ff and ff.get("color"):
+                    pcols[j] = ff["color"]
+            if vary and kind in ("pie", "doughnut"):          # each slice its own accent
+                for j in range(len(vals)):
+                    pcols.setdefault(j, "#" + ctx.scheme("accent%d" % (j % 6 + 1)).lstrip("#"))
+            sl = dict(pl)
+            dl_flags(s.find("c:dLbls", NS), sl)
+            mk = s.find("c:marker/c:symbol", NS)
+            marker = plot_markers if mk is None else mk.get("val") != "none"
+            if kind == "scatter" and style is not None and style.get("val") in ("line", "smooth"):
+                marker = mk is not None and mk.get("val") != "none"
+            ser = {"name": name, "cats": cats, "vals": vals, "color": col, "kind": kind, "secondary": secondary,
+                   "pointColors": [pcols.get(j) for j in range(len(vals))] if pcols else None,
+                   "fmt": sl.get("fmt") or (fmt_code if fmt_code and fmt_code != "General" else None),
+                   "labels": sl, "marker": marker, "width": width,
+                   "line": not line_hidden and not (kind == "scatter" and style is not None and style.get("val") == "marker")}
+            if kind == "scatter":
+                ser["xs"] = [_num(v) for v in _cache_vals(x_el)] if x_el is not None else list(range(1, len(vals) + 1))
+            sm = s.find("c:smooth", NS)
+            if sm is not None and sm.get("val") == "1":
+                ser["smooth"] = True
+            series.append(ser)
     if not series:
         return None
     out["series"] = series
     out["labels"] = labels
-    # axes
-    for ax_tag, key in (("c:valAx", "val"), ("c:catAx", "cat"), ("c:dateAx", "cat")):
-        ax = pa.find(ax_tag, NS)
-        if ax is None:
-            continue
-        de = ax.find("c:delete", NS)
-        info = {"hidden": de is not None and de.get("val") == "1"}
-        for k in ("min", "max"):
-            e = ax.find("c:scaling/c:" + k, NS)
-            if e is not None:
-                info[k] = float(e.get("val"))
-        info["style"] = _txpr_style(ax, ctx)
-        gl = ax.find("c:majorGridlines", NS)
-        info["grid"] = gl is not None
-        nf = ax.find("c:numFmt", NS)
-        if nf is not None and nf.get("formatCode") not in (None, "General"):
-            info["fmt"] = nf.get("formatCode")
-        out.setdefault(key + "Axis", info)
+
+    # title: explicit, or PowerPoint's automatic one (the series name) on a single-series chart
+    t = chart.find("c:title", NS)
+    atd = chart.find("c:autoTitleDeleted", NS)
+    deleted = atd is not None and atd.get("val") == "1"
+    if t is not None and not deleted:
+        out["title"] = _first_text(t.find("c:tx", NS)) or (series[0]["name"] if len(series) == 1 else None)
+        st = {}
+        rp = _first_found(t, ".//a:rPr", ".//a:defRPr")
+        _rpr_into(rp, st, ctx)
+        out["titleStyle"] = st
+    elif t is None and not deleted and len(series) == 1:
+        out["title"] = series[0]["name"]
+        out["titleStyle"] = {"auto": True}
+
+    # axes: primary value axis, a secondary one if a series uses it, the category axis
+    for aid, (tag, ax) in axes.items():
+        if tag == "valAx":
+            if ax is primary_val:
+                out["valAxis"] = axis_info(ax)
+            elif any(s["secondary"] for s in series):
+                out["valAxis2"] = axis_info(ax)
+            elif out["type"] == "scatter" and "catAxis" not in out:
+                out["catAxis"] = axis_info(ax)          # scatter: the X axis is a value axis
+        elif tag in ("catAx", "dateAx") and "catAxis" not in out:
+            out["catAxis"] = axis_info(ax)
+    if "valAxis" not in out and primary_val is not None:
+        out["valAxis"] = axis_info(primary_val)
     lg = chart.find("c:legend", NS)
     if lg is not None:
         lp = lg.find("c:legendPos", NS)
         out["legend"] = {"pos": lp.get("val") if lp is not None else "r", "style": _txpr_style(lg, ctx)}
     return out
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------- tables
@@ -725,13 +890,14 @@ class SlideParser:
             if not ln:
                 return
         # text with inheritance: master txStyles → master ph → layout ph → own
-        chain = []
+        chain, body_chain = [], []
         if key:
             t = key["type"]
             chain.append(self.styles.get("title" if t in ("title", "ctrTitle") else
                                          "body" if t in ("body", "subTitle", "obj") else "other"))
             for src in (mas_ph, lay_ph):
                 if src is not None:
+                    body_chain.append(src.find("p:txBody/a:bodyPr", NS))
                     chain.append(src.find("p:txBody/a:lstStyle", NS))
                     # layout placeholders often set props on their sample paragraph only
                     chain.append(_para_as_lst(src.find("p:txBody/a:p", NS)))
@@ -742,7 +908,7 @@ class SlideParser:
             fc, _ = color_of(fref, self.ctx) if fref is not None else (None, None)
             if fc:
                 chain.insert(1, _color_lst(fc))
-        tx = text_of(el.find("p:txBody", NS), self.ctx, chain, self.slide_no)
+        tx = text_of(el.find("p:txBody", NS), self.ctx, chain, self.slide_no, body_chain)
         if tx:
             piece["text"] = tx
             if key and key["type"] in ("title", "ctrTitle"):
