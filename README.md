@@ -134,7 +134,7 @@ so bars grow in and doughnut slices pop out when the slide comes apart.
 
 | Do this | Get this |
 |---|---|
-| **Swipe** an open hand ← / → | next / previous slide |
+| **Swipe** an open hand ← / → | next / previous slide (to go back right after, pause first: the hand's return stroke is ignored) |
 | **Two pinches**, pull apart | the slide comes apart into floating layers |
 | **Two pinches**, together | it rebuilds · **twist** = turn the hologram |
 | **Pinch** a piece | grab it out of the slide and move it |
@@ -175,9 +175,27 @@ and column + line combos on two axes), theme colours, hidden slides, speaker not
 SmartArt internals, embedded video, EMF/WMF pictures; table styles are approximated.
 
 Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**17/17**) ·
-`/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat.
+`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**21/21**) ·
+`/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat ·
+`/linkpresent?record=1` records your hands · `/linkpresent?replay=<name>` replays a recording.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
+
+### Record your hands (so the gestures get tuned to real people)
+
+Open **http://localhost:4890/linkpresent?record=1** with your webcam on. A coach walks you through
+eight short takes: just presenting (nothing should fire), swiping next and back, pulling a slide
+apart, grabbing a chart, tapping to bring a card forward, the laser pointer and the peace-sign reset.
+Do each one naturally; the coach shows live what the engine saw. **Space** starts and ends a take,
+**R** redoes it, **S** skips it.
+
+Only the 21 hand points per camera frame are saved — never an image — to
+`recordings/hands-<date>.json.gz` on your computer. Send that file to Claude or commit it: every take
+becomes a test that `tools/check.py` replays through the real camera path, so a gesture that misfired
+for you stays fixed. A take the engine missed is the most useful one to keep.
+
+`recordings/synthetic-smoke.json.gz` is a simulated session (made by
+`tools/make_synthetic_recording.js`) that keeps the record → replay pipeline tested until real
+recordings arrive.
 
 ### Sample decks
 

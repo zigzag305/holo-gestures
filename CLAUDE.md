@@ -16,11 +16,13 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `server.py` | stdlib HTTP server, port 4890 (`HOLO_PORT` overrides). Pages, static `/vendor/ /props/ /js/`, notes API, deck API (`/api/decks`, `/api/deck`, `/api/deck/media`, `/api/deck/upload`) |
 | `pptx_deck.py` | stdlib .pptx parser → slides of *pieces* (`shape`, `line`, `pic`, `table`, `chart`) in CSS px at 96 dpi. Resolves master → layout → slide inheritance, groups, theme colours, chart data, speaker notes. `python3 pptx_deck.py decks/x.pptx [--json]` |
 | `js/hands.js` | **shared hand engine**: pinch thresholds, `handMetrics`, One Euro smoothing, slot assignment, ghost-hand dedupe, MediaPipe loader, `synthHand` |
+| `js/recorder.js` | recorded-hands format, the guided takes and their expectations, event counting |
 | `js/lp-render.js` · `js/lp-charts.js` · `js/lp-dom.js` | LinkPresent renderer: one DOM element per piece; charts rebuilt from the file's numbers |
 | `holo.html` | HOLO page: cards, physics, 3D props, reader, Jarvis voice, its sim + probe |
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
 | `tools/check.py` | every check in one command (runs `fidelity.py` too when LibreOffice + Poppler exist) |
 | `tools/fidelity.py` | slide-by-slide score vs a LibreOffice (or PowerPoint-PDF) reference → `state/fidelity/report.html` |
+| `recordings/` | real hand sessions (`?record=1`), replayed as tests by `check.py`; `synthetic-smoke` is simulated (`tools/make_synthetic_recording.js`) |
 | `decks/` | six fictional sample decks, each built a different way (see README *Sample decks*); the probe battery is written for `velora-q3-2026-qbr.pptx` |
 | `vendor/` | self-hosted MediaPipe + three.js |
 | `state/` | runtime output (gitignored): diag, hand state, `check/` screenshots |
@@ -58,7 +60,12 @@ check the worst slides; the score is a guide (LibreOffice has its own quirks), t
 - **New probe check:** drive the real engine with `synthHand` frames, never by calling the
   handler directly. Make sure the check would fail on a wrong value, not only on a missing feature.
 - URL switches: `?sim=1` scripted demo · `?probe=1` test battery · `?clean=1` meeting view ·
-  `?render=1` bare flat slide (fidelity) · `?deck=name.pptx&slide=N`.
+  `?render=1` bare flat slide (fidelity) · `?record=1` record hands · `?replay=name` replay a recording ·
+  `?deck=name.pptx&slide=N`.
+- **Every tracker result enters through `onDetections()`** in `linkpresent.html` (camera, replay, test
+  hooks). Engine reactions are `emit()`ted as events; recordings and replays are judged on those.
+- **Recordings decide tuning.** A real recording that fails is a bug report with a repro: fix the
+  engine until its replay passes, and keep the file. Never tune thresholds on synthetic hands alone.
 - **PowerPoint defaults:** where a file is silent, follow PowerPoint, not taste — theme accents for
   chart colours, the chart-wide text size, inherited bodyPr from layout placeholders.
 - Commits: small, one concern each, message says what changed and how it was verified.

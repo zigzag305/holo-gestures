@@ -3,9 +3,10 @@
 Open work, in order. Update this file as things land; `CLAUDE.md` holds only what stays true.
 
 ## Next
-1. **Record real hands, replay them as tests.** A `?record=1` mode that saves real hand landmarks
-   to a file, and probe checks that replay those recordings. Every gesture that misfires on a real
-   webcam becomes a permanent test. *Needs: a webcam session.*
+1. **Real hands as tests.** Built: `?record=1` coach, `recordings/`, replay in `check.py`. Open: the first
+   real session. *Needs: a 10-minute webcam session at /linkpresent?record=1, then the file.*
+   Questions it answers: do relaxed hands or fists fire grabs ("rest" take)? Do two hands raised close
+   together get merged by the ghost filter ("pull-apart")? Is the swipe threshold right for real arms?
 2. **PowerPoint as the reference.** Done: five varied sample decks and `tools/fidelity.py` (scores
    against LibreOffice). Still open: decks made *in PowerPoint by people* and their PowerPoint-exported
    PDFs as the reference (`--pdf-dir`). *Needs: open the sample decks in PowerPoint, re-save, export PDF.*
