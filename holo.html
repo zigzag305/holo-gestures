@@ -367,7 +367,7 @@ readerEl.addEventListener('pointerdown', closeReader);
 const assignHands = (lms) => assignSlots(lms, HANDS, px);
 function mkHandState(){ return { present:false, seen:0, pinch:false, pinchT:0, startPalm:null,
   smooth:null, trail:[], open:false, openT:0, fist:false, lm:null, m:null, hover:null, twist:null,
-  point:0, spans:[], upT:0 }; }
+  point:0, spans:[], upT:0, _pp:null }; }
 const HANDS = [mkHandState(), mkHandState()];
 const drag = { card:null, hand:-1, dx:0, dy:0 };
 let world = null;

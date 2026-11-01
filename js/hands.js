@@ -65,9 +65,15 @@ export function oneEuro(st, raw, now){
    frames; positional assignment shreds a hand's state (seen-counter, pinch, filter)
    on every swap, so the real hand never earns the screen. Each detection claims the
    slot whose last palm is NEAREST — state survives, and a far-away stray can't steal
-   a live hand's slot. `hands` = the page's two slot states ({present, seen, m}),
+   a live hand's slot. `hands` = the page's two slot states ({present, seen, m, trail}),
    `px` = the page's landmark→screen mapper. Camera path only: probe/sim stay
-   positional by design. */
+   positional by design.
+   MOVING HANDS (2026-11-01, found by replaying a recorded swipe): at the peak of a fast
+   swipe the palm jumps 300-450 px between camera frames — past the 260 px claim radius —
+   so the hand lost its slot mid-swipe, was dropped, and came back as a "new" hand. A slot
+   now also accepts a detection near where its hand is HEADING (last palm + its last raw step,
+   remembered here as hands[i]._pp — the smoothed trail lags exactly when a swipe accelerates),
+   so fast hands keep their identity while a far stray still can't steal the slot. */
 export function assignHands(lms, hands, px){
   const out = [null, null];
   const cand = lms.slice(0, 2);
@@ -76,12 +82,13 @@ export function assignHands(lms, hands, px){
   const order = [0, 1].filter(i => hands[i].present && hands[i].m)
     .sort((a, b) => hands[b].seen - hands[a].seen);
   for (const i of order){
-    const last = px(hands[i].m.palm);
+    const last = px(hands[i].m.palm), prev = hands[i]._pp;
+    const ahead = prev ? { x: 2 * last.x - prev.x, y: 2 * last.y - prev.y } : last;   // constant-velocity guess
     let bi = -1, bd = 1e9;
     cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
-      const p = palmPx(lm), d = Math.hypot(p.x - last.x, p.y - last.y);
+      const p = palmPx(lm), d = Math.min(Math.hypot(p.x - last.x, p.y - last.y), Math.hypot(p.x - ahead.x, p.y - ahead.y));
       if (d < bd){ bd = d; bi = k; } });
-    if (bi >= 0 && bd < 260){ out[i] = cand[bi]; claimed[bi] = true; }
+    if (bi >= 0 && bd < 260){ out[i] = cand[bi]; claimed[bi] = true; hands[i]._pp = last; }
   }
   cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
     const slot = out[0] == null && !hands[0].present ? 0
