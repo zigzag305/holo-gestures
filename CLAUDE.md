@@ -19,8 +19,9 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `js/lp-render.js` · `js/lp-charts.js` · `js/lp-dom.js` | LinkPresent renderer: one DOM element per piece; charts rebuilt from the file's numbers |
 | `holo.html` | HOLO page: cards, physics, 3D props, reader, Jarvis voice, its sim + probe |
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
-| `tools/check.py` | every check in one command |
-| `decks/` | .pptx files to present; `velora-q3-2026-qbr.pptx` is the sample (fictional company) |
+| `tools/check.py` | every check in one command (runs `fidelity.py` too when LibreOffice + Poppler exist) |
+| `tools/fidelity.py` | slide-by-slide score vs a LibreOffice (or PowerPoint-PDF) reference → `state/fidelity/report.html` |
+| `decks/` | six fictional sample decks, each built a different way (see README *Sample decks*); the probe battery is written for `velora-q3-2026-qbr.pptx` |
 | `vendor/` | self-hosted MediaPipe + three.js |
 | `state/` | runtime output (gitignored): diag, hand state, `check/` screenshots |
 
@@ -48,8 +49,8 @@ python3 tools/check.py --quick    # no browser
 python3 tools/check.py --all-slides
 ```
 Every check must pass. Then **open the screenshots and look at them**: a passing probe doesn't
-prove a slide looks right. For parser changes, also try a deck built on python-pptx's default
-template (placeholder inheritance, table styles).
+prove a slide looks right. For parser or renderer changes, open `state/fidelity/report.html` and
+check the worst slides; the score is a guide (LibreOffice has its own quirks), the pictures decide.
 
 ## Conventions
 - **New gesture:** constant (if any) → rule in the page's `ingestHands` → a probe check that fails
@@ -57,5 +58,7 @@ template (placeholder inheritance, table styles).
 - **New probe check:** drive the real engine with `synthHand` frames, never by calling the
   handler directly. Make sure the check would fail on a wrong value, not only on a missing feature.
 - URL switches: `?sim=1` scripted demo · `?probe=1` test battery · `?clean=1` meeting view ·
-  `?deck=name.pptx&slide=N`.
+  `?render=1` bare flat slide (fidelity) · `?deck=name.pptx&slide=N`.
+- **PowerPoint defaults:** where a file is silent, follow PowerPoint, not taste — theme accents for
+  chart colours, the chart-wide text size, inherited bodyPr from layout placeholders.
 - Commits: small, one concern each, message says what changed and how it was verified.

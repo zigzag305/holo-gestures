@@ -112,7 +112,9 @@ python3 tools/check.py --quick  # no browser, a few seconds
 ```
 
 It prints PASS/FAIL per check and exits non-zero on any failure. GitHub runs the same command
-on every pull request.
+on every pull request. With LibreOffice and Poppler installed (`brew install --cask libreoffice &&
+brew install poppler` on a Mac) it also scores how closely LinkPresent draws every slide — see
+*Fidelity* below.
 
 ---
 
@@ -127,7 +129,7 @@ Charts aren't screenshots: they're **rebuilt live from the numbers stored inside
 so bars grow in and doughnut slices pop out when the slide comes apart.
 
 **Load a deck:** drop a `.pptx` anywhere on the page · or **LOAD .PPTX** · or put it in `decks/`
-(a sample 18-slide business review ships there). Point it at another folder with
+(six sample decks ship there — see *Sample decks* below). Point it at another folder with
 `{"decks": "/path/to/decks"}` in `holo.json`.
 
 | Do this | Get this |
@@ -164,14 +166,41 @@ Good to know:
   Teams may look flipped — the audience sees it the right way.)
 - Keep the LinkPresent window visible: Chrome slows down hand tracking in hidden windows.
 
-**What carries over from PowerPoint:** text and fonts, shapes, pictures, tables, native charts
-(bar, column, line, area, pie, doughnut — with their real data), groups, theme colours,
-speaker notes. **What doesn't:** PowerPoint's own animations and transitions (LinkPresent brings its own
-motion), SmartArt internals, embedded video, EMF/WMF pictures, table styles.
+**What carries over from PowerPoint:** text and fonts (layout and master inheritance, bullets and
+numbering styles, shrink-to-fit, columns, vertical text), shapes (rotation, flips, groups,
+gradients, connectors with arrowheads), pictures and picture backgrounds, tables with merged cells,
+native charts with their real data (column, bar, stacked, 100%, line, area, scatter, pie, doughnut,
+and column + line combos on two axes), theme colours, hidden slides, speaker notes.
+**What doesn't:** PowerPoint's own animations and transitions (LinkPresent brings its own motion),
+SmartArt internals, embedded video, EMF/WMF pictures; table styles are approximated.
 
 Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1` runs the gesture test battery (**17/17**) · `/linkpresent?clean=1` opens in meeting view.
+`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**17/17**) ·
+`/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
+
+### Sample decks
+
+All companies and figures are fictional. Each deck is built a different way on purpose, because
+PowerPoint files differ depending on what made them:
+
+| Deck | Built with | What it stresses |
+|---|---|---|
+| `velora-q3-2026-qbr` | pptxgenjs | 18-slide business review: KPIs, P&L table, roadmap, charts |
+| `brisa-hotels-campaign-pitch` | pptxgenjs | photos: picture backgrounds, cropped and full-bleed images, transparency, a logo on the layout |
+| `norte-logistics-sales-kickoff` | python-pptx, default template (4:3) | layout inheritance, bullet levels, numbering, five chart types, merged table cells |
+| `quanta-health-product-roadmap` | python-pptx | groups inside groups, rotation and flips, chevrons, stars, elbow connectors, gradients |
+| `ribera-foods-board-report` | pptxgenjs, re-saved by LibreOffice | dense tables, column + line combo on two axes, 100% stacked, scatter |
+| `taller-venta-consultiva` | python-pptx (16:10, Spanish) | mixed formatting, lettered numbering, shrink-to-fit, two columns, vertical text, hidden slide |
+
+### Fidelity
+
+`python3 tools/fidelity.py` renders every slide twice — with LibreOffice as the reference and in
+LinkPresent's flat render mode — scores how many pixels agree, and writes
+`state/fidelity/report.html` (reference | LinkPresent | differences, worst slides first).
+LibreOffice is not PowerPoint and has quirks of its own, so treat the score as a guide. For a true
+reference, export your deck to PDF from PowerPoint and run
+`python3 tools/fidelity.py --pdf-dir folder-with-the-pdfs`.
 
 ---
 
