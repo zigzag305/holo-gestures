@@ -76,13 +76,26 @@
         font-family:"SF Mono",ui-monospace,monospace; font-size:11px; letter-spacing:.14em; color:#bfeee0;
         background:rgba(8,14,18,.7); border:1px solid rgba(125,255,217,.22); border-radius:10px; padding:7px 12px;
         max-width:46vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #legend { position:fixed; left:18px; bottom:18px; z-index:6; pointer-events:none; max-width:min(860px, 60vw);
-        font-family:"SF Mono",ui-monospace,monospace; font-size:10px; letter-spacing:.08em; line-height:1.95;
-        color:#8fd8c2; background:rgba(8,14,18,.74); border:1px solid rgba(125,255,217,.22);
-        border-radius:12px; padding:8px 14px; }
-  #legend b { color:#7dffd9; font-weight:600; }
-  #legend { transition:opacity .6s; }
+  /* GESTURE GUIDE: one card per gesture — the pose, how to do it, what it does */
+  #legend { position:fixed; left:18px; bottom:18px; z-index:6; pointer-events:none; width:min(900px, calc(100vw - 36px));
+        font:13px/1.35 -apple-system,"Segoe UI",sans-serif; color:#cfe3dc; background:rgba(8,14,18,.84);
+        border:1px solid rgba(125,255,217,.25); border-radius:14px; padding:12px 14px 10px; transition:opacity .5s; }
+  #legend .gh { display:flex; justify-content:space-between; align-items:baseline; margin:0 2px 8px;
+        font:600 11px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.16em; color:#7dffd9; text-transform:uppercase; }
+  #legend .gh span { color:#7f968e; letter-spacing:.08em; text-transform:none; font-weight:500; }
+  #legend .cards { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; }
+  #legend .card { background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:8px 10px; }
+  #legend .card i { font-style:normal; font-size:24px; line-height:1; display:block; margin-bottom:4px; }
+  #legend .card b { display:block; color:#fff; font-size:13px; margin-bottom:2px; }
+  #legend .card u { display:block; text-decoration:none; color:#7dffd9; font-size:12px; margin-top:3px; }
+  #legend .keys { margin:8px 2px 0; font:11px/1.6 "SF Mono",ui-monospace,monospace; color:#7f968e; }
+  #legend .keys b { color:#bfeee0; font-weight:600; }
+  @media (max-width: 760px){ #legend .cards { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
   body.nolegend #legend { opacity:0; }
+  #guideChip { position:fixed; left:18px; bottom:18px; z-index:6; display:none; cursor:pointer;
+        font:600 11px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.14em; color:#7dffd9;
+        background:rgba(8,14,18,.8); border:1px solid rgba(125,255,217,.3); border-radius:99px; padding:9px 14px; }
+  body.nolegend #guideChip { display:block; }
   #notes { position:fixed; left:18px; bottom:96px; z-index:6; width:min(420px, 40vw); display:none;
         font-size:14px; line-height:1.55; color:#e3efea; background:rgba(8,14,18,.86);
         border:1px solid rgba(255,204,110,.35); border-radius:12px; padding:12px 16px; }
@@ -105,17 +118,18 @@
   #empty { position:fixed; inset:0; z-index:4; display:none; align-items:center; justify-content:center; text-align:center;
         font-family:"SF Mono",ui-monospace,monospace; font-size:14px; letter-spacing:.14em; line-height:2; color:#a9ffe6; }
   /* MEETING VIEW: what Teams / Zoom / Meet see through OBS — slide, you, your hands. No chrome. */
-  body.clean #ui, body.clean #legend, body.clean #notes, body.clean #counter, body.clean #toast { display:none !important; }
+  body.clean #ui, body.clean #legend, body.clean #guideChip, body.clean #notes, body.clean #counter, body.clean #toast { display:none !important; }
   /* RECORD (?record=1): the coach that walks you through each gesture */
   #rec { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:8; display:none;
         width:min(640px, calc(100vw - 32px)); padding:16px 20px 14px; border-radius:16px;
         background:rgba(8,14,18,.9); border:1px solid rgba(125,255,217,.4); color:#e3efea;
         font:14px/1.5 -apple-system,"Segoe UI",sans-serif; box-shadow:0 20px 60px rgba(0,0,0,.5); }
   body.recording #rec { display:block; }
-  body.recording #legend, body.recording #counter { display:none !important; }
+  body.recording #legend, body.recording #guideChip, body.recording #counter { display:none !important; }
   #rec .k { font:600 11px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.16em; color:#7dffd9; text-transform:uppercase; }
   #rec h2 { font-size:22px; margin:8px 0 4px; color:#fff; }
   #rec p { margin:0 0 10px; color:#c9d6d2; }
+  #rec p.tip { margin:8px 0 0; font-size:12px; color:#8fa69e; }
   #rec .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   #rec button { font:600 12px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.1em; padding:9px 14px; border-radius:99px;
         cursor:pointer; color:#05110d; background:#7dffd9; border:0; }
@@ -130,7 +144,7 @@
   #rec code { font:12px "SF Mono",ui-monospace,monospace; color:#7dffd9; }
   /* RENDER (?render=1): the bare slide, flat and full-size, for tools/fidelity.py to compare with a reference */
   body.render { background:#000; }
-  body.render #ui, body.render #legend, body.render #notes, body.render #counter, body.render #toast, body.render #hint,
+  body.render #ui, body.render #legend, body.render #guideChip, body.render #notes, body.render #counter, body.render #toast, body.render #hint,
   body.render #hud, body.render #vignette, body.render #cam, body.render #empty { display:none !important; }
   body.render .bgplate { box-shadow:none !important; }
   body.render .bgplate > .inner { border-radius:0 !important; opacity:1 !important; }
@@ -152,9 +166,22 @@
 </div>
 <div id="notes"><b>SPEAKER NOTES</b><span></span></div>
 <div id="counter"></div>
-<div id="legend"><b>SWIPE</b> open hand ← → next / back &nbsp;·&nbsp; <b>TWO PINCHES</b> apart = pull the slide apart · together = rebuild · twist = turn
-<br><b>PINCH</b> a piece = grab it out · second hand stretch = resize &nbsp;·&nbsp; <b>TAP</b> = focus / back &nbsp;·&nbsp; <b>POINT</b> = laser &nbsp;·&nbsp; <b>PEACE ✌</b> = reset
-<br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen · <b>?</b> this help</div>
+<div id="legend">
+  <div class="gh">Gestures <span>one hand, palm to the camera · press ? to hide / show</span></div>
+  <div class="cards">
+    <div class="card"><i>✋</i><b>Swipe</b>Open hand, sweep it sideways, fast.<u>← next slide · → previous</u></div>
+    <div class="card"><i>🤏</i><b>Grab</b>Touch thumb and index on a piece, move, open to drop.<u>pull a piece out</u></div>
+    <div class="card"><i>🤏</i><b>Tap</b>A quick pinch on a piece, then open.<u>bring it to the front · tap again = back</u></div>
+    <div class="card"><i>☝️</i><b>Point</b>Index finger out, other fingers folded.<u>laser pointer</u></div>
+    <div class="card"><i>🤏 🤏</i><b>Pull apart</b>Pinch with both hands and pull them apart.<u>explode the layers · together = rebuild</u></div>
+    <div class="card"><i>🤏↻🤏</i><b>Twist</b>Both hands pinched, one goes up, one goes down.<u>turn the slide in 3D</u></div>
+    <div class="card"><i>🤏 + 🤏</i><b>Resize</b>Hold a piece, pinch with the other hand and stretch.<u>bigger / smaller</u></div>
+    <div class="card"><i>✌️</i><b>Reset</b>Hold a peace sign for one second.<u>everything back in place</u></div>
+  </div>
+  <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close: full = pinched. The label shows what LinkPresent sees.
+    <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen</div>
+</div>
+<div id="guideChip">✋ GESTURES · ?</div>
 <div id="toast"></div>
 <div id="rec"></div>
 <div id="hint"></div>
@@ -481,7 +508,7 @@ const mkHand = () => ({ present: false, seen: 0, pinch: false, pinchN: 0, openN:
                        oe: null, cur: null, m: null, hover: null, upT: 0, _pp: null, pp: null, movingT: null });
 const HANDS = [mkHand(), mkHand()];
 const assignHands = (lms) => assignSlots(lms, HANDS, px);   // identity-stable slots (camera path only)
-let lastPeace = -9e9;
+let lastPeace = -9e9, guideTimer = 0;
 function dropHand(i){
   const st = HANDS[i];
   if (st.present) returnArmed = true;            // the hand left the frame: the return stroke is over
@@ -497,6 +524,7 @@ function ingestHands(raw, now = performance.now()){
     // a HOLDING hand survives a short tracking gap (HOLD_GRACE_MS): it stays put and keeps the piece
     if (!lm){ if (st.present && !(st.pinch && now - st.upT < HOLD_GRACE_MS)) dropHand(i); continue; }
     st.present = true; st.seen++; st.upT = now; st.m = m;
+    if (!guideTimer && !PROBE && !REPLAY) guideTimer = setTimeout(() => document.body.classList.add('nolegend'), 25000);   // the guide steps aside 25 s after it first sees you (? brings it back)
     const cur = st.cur = oneEuro(st, px(m.tip), now);
     const palm = px(m.palm);
     // stillness re-arms the opposite swipe (see SWIPE_RETURN_LOCK)
@@ -554,6 +582,30 @@ function onDetections(res, vw, vh, now = performance.now()){
 function reapStale(){ const now = performance.now(); for (let i = 0; i < 2; i++) if (HANDS[i].present && now - HANDS[i].upT > 280) dropHand(i); }
 
 /* ---------- HUD: fingertips, pinch state, stretch line, laser ---------- */
+/* what LinkPresent thinks this hand is doing, in words — so a presenter learns the poses
+   and a misread is visible the moment it happens (hidden in meeting view) */
+function poseLabel(st, i){
+  const m = st.m, held = PT['h' + i];
+  if (st.pinch){
+    if (TWO.active) return TWO.piece ? '🤏 resize' : '🤏 pull apart · twist';
+    if (held && held.piece) return '🤏 holding ' + (held.piece.d.kind === 'chart' ? 'chart' : held.piece.d.kind === 'pic' ? 'picture' : held.piece.d.kind === 'table' ? 'table' : 'piece');
+    return '🤏 turning the slide';
+  }
+  if (!m) return '';
+  if (st.peaceN > 0) return '✌ hold to reset';
+  if (m.point) return '☝ point';
+  if (st.hover) return (m.openish ? '✋' : '·') + ' pinch to grab';
+  if (m.openish) return '✋ open';
+  if (m.fist) return '✊ fist';
+  return '';
+}
+function handLabel(c, text){
+  if (!text || document.body.classList.contains('clean')) return;
+  HX.font = '600 13px -apple-system, "Segoe UI", sans-serif'; HX.textAlign = 'center'; HX.textBaseline = 'top';
+  const w = HX.measureText(text).width + 16, x = c.x - w / 2, y = c.y + 30;
+  HX.fillStyle = 'rgba(8,14,18,.78)'; HX.beginPath(); HX.roundRect(x, y, w, 22, 11); HX.fill();
+  HX.fillStyle = '#dffff4'; HX.fillText(text, c.x, y + 4);
+}
 function drawHud(now){
   HX.clearRect(0, 0, W, H);
   for (const st of HANDS){
@@ -567,6 +619,7 @@ function drawHud(now){
       }
       HX.fillStyle = '#ff3b3b'; HX.shadowColor = '#ff3b3b'; HX.shadowBlur = 24;
       HX.beginPath(); HX.arc(st.cur.x, st.cur.y, 9, 0, 7); HX.fill(); HX.shadowBlur = 0;
+      handLabel(st.cur, '☝ laser');
       continue;
     }
     const c = st.cur;
@@ -576,6 +629,13 @@ function drawHud(now){
     if (st.pinch){ HX.fillStyle = 'rgba(125,255,217,.55)'; HX.fill(); }
     else if (st.pinchN){ HX.fillStyle = 'rgba(125,255,217,.2)'; HX.fill(); }
     HX.shadowBlur = 0;
+    // PINCH METER: the ring fills as thumb and index close — full exactly at PINCH_IN
+    if (!st.pinch && st.m){
+      const f = Math.max(0, Math.min(1, (PINCH_OUT + .25 - st.m.pinch) / (PINCH_OUT + .25 - PINCH_IN)));
+      if (f > .05){ HX.strokeStyle = 'rgba(255,190,90,.95)'; HX.lineWidth = 4; HX.shadowColor = 'rgba(0,0,0,.5)'; HX.shadowBlur = 4;
+        HX.beginPath(); HX.arc(c.x, c.y, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); HX.stroke(); HX.shadowBlur = 0; }
+    }
+    handLabel(c, poseLabel(st, HANDS.indexOf(st)));
     if (st.peaceN > 0 && st.peaceN < 8){
       HX.strokeStyle = 'rgba(255,207,125,.9)'; HX.lineWidth = 3;
       HX.beginPath(); HX.arc(c.x, c.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * st.peaceN / 8); HX.stroke();
@@ -842,9 +902,10 @@ function recRender(){
     row.append(btn(camOn || window.__recTest ? 'START  (SPACE)' : 'WAITING FOR CAMERA…', recNext));
   } else if (REC.phase === 'ready'){
     k.textContent = `Take ${REC.i + 1} of ${TAKES.length}`;
-    el('h2', null, recEl).textContent = take.title;
+    el('h2', null, recEl).textContent = (take.icon ? take.icon + '  ' : '') + take.title;
     el('p', null, recEl).textContent = take.say;
     el('div', 'live', recEl).textContent = 'Goal: ' + want(take);
+    el('p', 'tip', recEl).textContent = 'The label under your fingertip shows what LinkPresent sees. If a gesture misfires, keep the take anyway: that is the useful part.';
     const row = el('div', 'row', recEl); row.style.marginTop = '10px';
     row.append(btn('START  (SPACE)', recStart), btn('SKIP  (S)', recSkip, true));
   } else if (REC.phase === 'count'){
@@ -1047,7 +1108,7 @@ window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ retur
 (async () => {
   if (Q.has('clean')) document.body.classList.add('clean');
   if (RENDER) document.body.classList.add('render');
-  setTimeout(() => document.body.classList.add('nolegend'), 20000);   // the help steps aside once you know it (? brings it back)
+  $('guideChip').onclick = () => document.body.classList.remove('nolegend');
   applyView();
   const want = Q.get('deck') || ((RECORD || REPLAY) ? 'velora-q3-2026-qbr.pptx' : null);
   const list = await refreshDeckList(want);
