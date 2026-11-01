@@ -12,7 +12,9 @@ What it does
   3. opens holo.html?probe=1 and linkpresent.html?probe=1 in headless Chromium and
      reads their scores, plus any page errors
   4. saves screenshots to state/check/ (normal, pulled apart, meeting view)
-  5. scores every slide against a LibreOffice reference (tools/fidelity.py) when LibreOffice
+  5. replays every recording in recordings/ (real hands, captured with /linkpresent?record=1)
+     through the camera path and checks each take did what the person did
+  6. scores every slide against a LibreOffice reference (tools/fidelity.py) when LibreOffice
      and Poppler are installed; the side-by-side report lands in state/fidelity/report.html
 
 Prints PASS/FAIL per check and exits 0 only if everything passed.
@@ -205,7 +207,48 @@ def check_browser(base, deck_names, all_slides):
         print(f"  {shots + 1} images saved in {os.path.relpath(OUT, ROOT)}/ — look at them, a passing probe does not prove a slide looks right")
 
 
-# ---------------------------------------------------------------- 5. fidelity
+# ---------------------------------------------------------------- 5. recorded hands
+def check_recordings(base):
+    print("\nRecorded hands (recordings/ → /linkpresent?replay=)")
+    import gzip
+    rec_dir = os.path.join(ROOT, "recordings")
+    names = sorted(n[:-8] for n in os.listdir(rec_dir) if n.endswith(".json.gz")) if os.path.isdir(rec_dir) else []
+    if not names:
+        print("  SKIP  no recordings yet — record real hands at /linkpresent?record=1")
+        return
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        for name in names:
+            with gzip.open(os.path.join(rec_dir, name + ".json.gz"), "rb") as f:
+                rec = json.loads(f.read())
+            takes = rec.get("takes") or []
+            if not takes:
+                report(f"replay {name}", False, "no takes in the file"); continue
+            scr = takes[0].get("screen") or {"w": 1440, "h": 900}
+            budget = sum((t["frames"][-1]["t"] if t.get("frames") else 0) + 2500 for t in takes) + 30000
+            pg = browser.new_page(viewport={"width": int(scr["w"]), "height": int(scr["h"])})
+            errs = []
+            pg.on("pageerror", lambda e: errs.append(str(e)))
+            pg.goto(f"{base}/linkpresent?replay={urllib.request.quote(name)}")
+            try:
+                pg.wait_for_function("() => window.__replay && window.__replay.done", timeout=budget)
+                r = pg.evaluate("() => window.__replay")
+            except Exception as e:  # noqa: BLE001
+                report(f"replay {name}", False, f"did not finish: {e}"); pg.close(); continue
+            if r.get("error"):
+                report(f"replay {name}", False, r["error"]); pg.close(); continue
+            for t in r["results"]:
+                live = t.get("live") or {}
+                was = "" if live.get("pass", True) == t["pass"] else (" · was failing when recorded" if t["pass"] else " · passed when recorded")
+                report(f"  {name} · {t['id']}", t["pass"], t["detail"] + was)
+            report(f"replay {name}", all(t["pass"] for t in r["results"]) and not errs,
+                   f"{sum(t['pass'] for t in r['results'])}/{len(r['results'])} takes" + (f" · page error: {errs[0]}" if errs else ""))
+            pg.close()
+        browser.close()
+
+
+# ---------------------------------------------------------------- 6. fidelity
 def check_fidelity(base, threshold):
     print("\nFidelity vs a LibreOffice reference (tools/fidelity.py)")
     import fidelity
@@ -243,6 +286,7 @@ def main():
         check_routes(base, decks)
         if not a.quick:
             check_browser(base, decks, a.all_slides)
+            check_recordings(base)
             if not a.no_fidelity:
                 check_fidelity(base, a.fidelity_threshold)
     except Exception as e:  # noqa: BLE001
