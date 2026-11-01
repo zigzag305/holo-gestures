@@ -14,14 +14,18 @@ Endpoints:
   GET  /api/deck?name=  → that deck unpacked into layered pieces (pptx_deck.py)
   GET  /api/deck/media  → one picture out of a deck (?name=&p=ppt/media/…)
   POST /api/deck/upload → save a .pptx into decks/ (?name=file.pptx, raw body)
+  GET  /api/recordings  → [{name, size, mtime}] of recorded hand sessions in recordings/
+  GET  /api/recordings/<name> → one recording (JSON)
+  POST /api/recordings?name= → save a recording (JSON body; stored gzipped). Hand points only,
+                         never camera images — the browser sends what the tracker measured.
   POST /api/state      → future Jarvis hook: writes state/holo-state.json so the
                          big brain can react to what the hands did ("Card pinned,
                          sir"). Nothing reads it yet by design — prototype stays
                          standalone until proven.
 """
-import json, os, re, time
+import gzip, json, os, re, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlparse, unquote as urllib_unquote
 
 import pptx_deck
 
@@ -135,6 +139,29 @@ def load_deck(name):
 
 MAX_UPLOAD = 200 * 1024 * 1024
 
+# ---------- RECORDED HANDS: what the tracker saw while a person did each gesture ----------
+REC_DIR = os.path.join(ROOT, "recordings")
+MAX_RECORDING = 40 * 1024 * 1024
+REC_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+
+def rec_path(name):
+    """Plain names only, always inside recordings/, always .json.gz."""
+    name = (name or "").removesuffix(".json.gz").removesuffix(".json")
+    if not REC_NAME.match(name) or ".." in name:
+        return None
+    return os.path.join(REC_DIR, name + ".json.gz")
+
+def list_recordings():
+    try:
+        names = [n for n in os.listdir(REC_DIR) if n.endswith(".json.gz")]
+    except OSError:
+        return []
+    out = []
+    for n in names:
+        st = os.stat(os.path.join(REC_DIR, n))
+        out.append({"name": n[:-8], "size": st.st_size, "mtime": st.st_mtime})
+    return sorted(out, key=lambda x: x["name"])
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quiet
         pass
@@ -195,6 +222,14 @@ class H(BaseHTTPRequestHandler):
             if data is None:
                 return self._send(404, {"error": "not found"})
             return self._send(200, data, self.MIME.get(os.path.splitext(part)[1].lower(), "application/octet-stream"))
+        if p == "/api/recordings":
+            return self._send(200, list_recordings())
+        if p.startswith("/api/recordings/"):
+            path = rec_path(urllib_unquote(p[len("/api/recordings/"):]))
+            if not path or not os.path.isfile(path):
+                return self._send(404, {"error": "no such recording"})
+            with gzip.open(path, "rb") as f:
+                return self._send(200, f.read())
         if p == "/api/props":
             # PROPS: any .glb dropped into props/ becomes a grabbable 3D object
             try:
@@ -239,6 +274,26 @@ class H(BaseHTTPRequestHandler):
             except OSError:
                 pass
             return self._send(200, {"ok": True})
+        if p == "/api/recordings":
+            qs = parse_qs(urlparse(self.path).query)
+            path = rec_path((qs.get("name") or [""])[0])
+            if not path:
+                return self._send(400, {"error": "name: letters, digits, . _ - only"})
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > MAX_RECORDING:
+                return self._send(413, {"error": "recording empty or too large"})
+            raw = self.rfile.read(n)
+            try:
+                data = json.loads(raw)
+                assert isinstance(data, dict) and isinstance(data.get("takes"), list)
+            except Exception:
+                return self._send(400, {"error": "not a recording"})
+            os.makedirs(REC_DIR, exist_ok=True)
+            tmp = path + ".tmp"
+            with gzip.open(tmp, "wb") as f:
+                f.write(raw)
+            os.replace(tmp, path)
+            return self._send(200, {"file": os.path.relpath(path, ROOT), "takes": len(data["takes"])})
         if p == "/api/deck/upload":
             qs = parse_qs(urlparse(self.path).query)
             raw = os.path.basename((qs.get("name") or ["deck.pptx"])[0])
