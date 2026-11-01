@@ -256,9 +256,10 @@ function closeOrb(orb){
   CARDS = CARDS.filter(k => k.parent !== orb);
   postState('close_folder', orb.title);
 }
+let reseed = Promise.resolve();   // the pending re-seed: anything that needs the new board awaits it
 function resetCards(){
   ink.length = 0;
-  fetch('/api/tree').then(r => r.json()).then(spawnOrbs)
+  return reseed = fetch('/api/tree').then(r => r.json()).then(spawnOrbs)
     .catch(() => spawnOrbs([{ kind:'folder', name:'HOLO', files:[{ title:'HOLO',
       body:'No notes served — point holo.json at a folder of markdown.', full:'' }] }]));
 }
@@ -367,7 +368,7 @@ readerEl.addEventListener('pointerdown', closeReader);
 const assignHands = (lms) => assignSlots(lms, HANDS, px);
 function mkHandState(){ return { present:false, seen:0, pinch:false, pinchT:0, startPalm:null,
   smooth:null, trail:[], open:false, openT:0, fist:false, lm:null, m:null, hover:null, twist:null,
-  point:0, spans:[], upT:0 }; }
+  point:0, spans:[], upT:0, _pp:null, oe:null }; }   // oe: a NEW hand starts a fresh smoothing filter, not the last hand's
 const HANDS = [mkHandState(), mkHandState()];
 const drag = { card:null, hand:-1, dx:0, dy:0 };
 let world = null;
@@ -1207,8 +1208,10 @@ if (Q.has('probe')) setTimeout(async () => {
     ingestHands([synthHand(.53,.5,'fist'), synthHand(.47,.5,'fist')]);
     ok('clap', shocks.length > sh0);
     // clap = full RESTORE now — wait for the async re-seed, then reopen an orb so the
-    // later note-dependent tests (open/dismiss/stretch/squeeze) still have material
-    await new Promise(r => setTimeout(r, 600));
+    // later note-dependent tests (open/dismiss/stretch/squeeze) still have material.
+    // (2026-11-01 CI flake: a fixed 600 ms wait; on slow runners the re-seed landed AFTER the orb
+    // was reopened and wiped its notes, so 'open' tapped a card no longer on the board)
+    await new Promise(r => setTimeout(r, 50)); await reseed;
     const orb2 = CARDS.find(cc => cc.kind === 'folder');
     if (orb2){
       orb2.x = W*.4; orb2.y = H*.35; orb2.vx = orb2.vy = 0; orb2.docked = false; orb2.tx = orb2.ty = null;
@@ -1223,8 +1226,18 @@ if (Q.has('probe')) setTimeout(async () => {
     ingestHands([]);
     // tap a file card → reader opens; any pinch closes
     const rc = CARDS.find(c => c.kind === 'note' && !c.docked) || fc;
-    rc.x = W*.38; rc.y = H*.44; rc.tx = rc.ty = null; rc.vx = rc.vy = 0; rc.docked = false; rc.s = rc.sT = 1;
-    const ra = aim(rc);
+    // put the card where nothing else can claim the tap. (2026-11-01 CI flake: at W*.38,H*.44 the card
+    // sat 86 px from the folder orb; on slow runners the orb was still scaled up from the zoom check, so
+    // its 82*s radius covered the cursor and — being on top — it took the tap. The engine was right.)
+    const clear = (x, y) => CARDS.every(c => c === rc || Math.hypot(x - c.x, y - c.y) > 260 * Math.max(1, c.s || 1, c.sT || 1));
+    let spot = null;
+    for (let gy = .30; gy <= .75 && !spot; gy += .05)
+      for (let gx = .25; gx <= .70 && !spot; gx += .05) if (clear(W*gx, H*gy)) spot = { x: W*gx, y: H*gy };
+    spot = spot || { x: W*.38, y: H*.44 };
+    rc.x = spot.x; rc.y = spot.y; rc.tx = rc.ty = null; rc.vx = rc.vy = 0; rc.docked = false; rc.s = rc.sT = 1;
+    // aim the FINGERTIP at the card: hover is picked from the open hand's tip, ~94 px above the palm
+    const tip0 = synthHand(.5, .5, 'open')[8];
+    const ra = { nx: 1 - rc.x / W - (tip0.x - .5), ny: rc.y / H - (tip0.y - .5) };
     warm(ra.nx, ra.ny);
     ingestHands([synthHand(ra.nx, ra.ny, 'pinch')]);
     ingestHands([synthHand(ra.nx, ra.ny, 'pinch')]);

@@ -37,7 +37,8 @@
   /* ---------- live charts ---------- */
   .chart { position:absolute; inset:0; transform-style:preserve-3d; font-family:Calibri, Carlito, "Segoe UI", Arial, sans-serif; }
   .chart .ctitle { position:absolute; left:0; right:0; top:4px; text-align:center; }
-  .chart .legend { position:absolute; left:0; right:0; display:flex; justify-content:center; gap:16px; }
+  .chart .legend { position:absolute; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; gap:4px 16px; }
+  .chart .legend span { white-space:nowrap; }
   .chart .legend i { display:inline-block; width:11px; height:11px; margin-right:6px; vertical-align:-1px; border-radius:2px; }
   .chart .bar { position:absolute; transform-style:preserve-3d; }
   .chart .bar .fill { position:absolute; inset:0; transform:scaleY(0); transform-origin:50% 100%;
@@ -52,6 +53,7 @@
   .chart.live .ln { stroke-dashoffset:0; }
   .chart .area { opacity:0; transition:opacity .9s .3s; }
   .chart.live .area { opacity:.22; }
+  .chart.live .area.solid { opacity:1; }
   .chart .dot { opacity:0; transition:opacity .3s; }
   .chart.live .dot { opacity:1; }
   .chart .pie { transform:scale(.55) rotate(-70deg); opacity:0; transition:transform .9s cubic-bezier(.2,.9,.25,1.08), opacity .5s; }
@@ -104,6 +106,35 @@
         font-family:"SF Mono",ui-monospace,monospace; font-size:14px; letter-spacing:.14em; line-height:2; color:#a9ffe6; }
   /* MEETING VIEW: what Teams / Zoom / Meet see through OBS — slide, you, your hands. No chrome. */
   body.clean #ui, body.clean #legend, body.clean #notes, body.clean #counter, body.clean #toast { display:none !important; }
+  /* RECORD (?record=1): the coach that walks you through each gesture */
+  #rec { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:8; display:none;
+        width:min(640px, calc(100vw - 32px)); padding:16px 20px 14px; border-radius:16px;
+        background:rgba(8,14,18,.9); border:1px solid rgba(125,255,217,.4); color:#e3efea;
+        font:14px/1.5 -apple-system,"Segoe UI",sans-serif; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  body.recording #rec { display:block; }
+  body.recording #legend, body.recording #counter { display:none !important; }
+  #rec .k { font:600 11px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.16em; color:#7dffd9; text-transform:uppercase; }
+  #rec h2 { font-size:22px; margin:8px 0 4px; color:#fff; }
+  #rec p { margin:0 0 10px; color:#c9d6d2; }
+  #rec .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  #rec button { font:600 12px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.1em; padding:9px 14px; border-radius:99px;
+        cursor:pointer; color:#05110d; background:#7dffd9; border:0; }
+  #rec button.ghost { background:transparent; color:#9fb4ab; border:1px solid rgba(255,255,255,.2); }
+  #rec .bar { height:6px; border-radius:3px; background:rgba(255,255,255,.12); overflow:hidden; margin:10px 0; }
+  #rec .bar i { display:block; height:100%; width:0; background:#ff5a5a; }
+  #rec .big { font:700 44px/1 "SF Mono",ui-monospace,monospace; color:#ffcf7d; text-align:center; margin:6px 0; }
+  #rec .live { font:500 13px/1.6 "SF Mono",ui-monospace,monospace; color:#ffe9c4; }
+  #rec .ok { color:#6fd39a; } #rec .no { color:#ff8a8a; }
+  #rec table { width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:13px; }
+  #rec td { padding:4px 6px; border-top:1px solid rgba(255,255,255,.08); }
+  #rec code { font:12px "SF Mono",ui-monospace,monospace; color:#7dffd9; }
+  /* RENDER (?render=1): the bare slide, flat and full-size, for tools/fidelity.py to compare with a reference */
+  body.render { background:#000; }
+  body.render #ui, body.render #legend, body.render #notes, body.render #counter, body.render #toast, body.render #hint,
+  body.render #hud, body.render #vignette, body.render #cam, body.render #empty { display:none !important; }
+  body.render .bgplate { box-shadow:none !important; }
+  body.render .bgplate > .inner { border-radius:0 !important; opacity:1 !important; }
+  body.render *, body.render *::before, body.render *::after { transition:none !important; animation:none !important; }
 </style></head><body>
 <video id="cam" autoplay playsinline muted></video>
 <div id="vignette"></div>
@@ -125,6 +156,7 @@
 <br><b>PINCH</b> a piece = grab it out · second hand stretch = resize &nbsp;·&nbsp; <b>TAP</b> = focus / back &nbsp;·&nbsp; <b>POINT</b> = laser &nbsp;·&nbsp; <b>PEACE ✌</b> = reset
 <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen · <b>?</b> this help</div>
 <div id="toast"></div>
+<div id="rec"></div>
 <div id="hint"></div>
 <div id="drop">DROP THE .PPTX</div>
 <input type="file" id="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
@@ -144,8 +176,9 @@ import { PINCH_IN, PINCH_OUT, PINCH_EARN, SPAN_MIN, AMP, handMetrics, oneEuro,
          assignHands as assignSlots, readDetections, loadHandLandmarker, synthHand as synthImage } from '/js/hands.js';
 import { el, rgba, fillCss } from '/js/lp-dom.js';
 import { renderPiece } from '/js/lp-render.js';
+import { TAKES, FORMAT_VERSION, encodeFrame, decodeFrame, countEvents, evaluate } from '/js/recorder.js';
 const Q = new URLSearchParams(location.search);
-const SIM = Q.has('sim'), PROBE = Q.has('probe');
+const SIM = Q.has('sim'), PROBE = Q.has('probe'), RENDER = Q.has('render'), RECORD = Q.has('record'), REPLAY = Q.get('replay');
 const $ = (id) => document.getElementById(id);
 const stage = $('stage'), hud = $('hud'), cam = $('cam'), statusEl = $('status');
 const HX = hud.getContext('2d');
@@ -186,6 +219,7 @@ function layout(){
   const L = LAYOUTS[VIEW.layout % LAYOUTS.length];
   FIT = Math.min(W * L.frac / DECK.w, H * .8 / DECK.h);
   CX = W * L.cx; CY = H * .53;
+  if (RENDER){ FIT = Math.min(W / DECK.w, H / DECK.h); CX = W / 2; CY = H / 2; }
   stage.style.perspectiveOrigin = `${CX}px ${CY}px`;
 }
 function buildSlide(i){
@@ -197,7 +231,7 @@ function buildSlide(i){
   const plateWrap = el('div', 'piece locked bgplate', sEl);
   plateWrap.style.cssText = `left:0;top:0;width:${DECK.w}px;height:${DECK.h}px;`;
   const plate = el('div', 'inner', plateWrap);
-  plate.style.background = sd.bg.image ? `center/cover url("${sd.bg.image}")` : fillCss(sd.bg.grad ? { grad: sd.bg.grad, angle: sd.bg.angle } : { color: sd.bg.color });
+  plate.style.background = sd.bg.image ? `center/100% 100% url("${sd.bg.image}")` : fillCss(sd.bg.grad ? { grad: sd.bg.grad, angle: sd.bg.angle } : { color: sd.bg.color });
   plate.style.borderRadius = '6px';
   plate.style.opacity = GLASS_LEVELS[VIEW.glass % GLASS_LEVELS.length];
   const pieces = [{ d: { id: 'bg' + i, locked: true, x: 0, y: 0, w: DECK.w, h: DECK.h, kind: 'bg' }, w: plateWrap, inner: plate, bg: true }];
@@ -251,28 +285,39 @@ function showSlide(i, dir = 1, instant = false){
   try { history.replaceState(null, '', `?${new URLSearchParams(Object.assign(Object.fromEntries(Q), { deck: DECK_NAME, slide: i + 1 }))}`); } catch (_){}
 }
 function hideBuilt(i){ const s = buildSlide(i); if (i !== cur && (!trans || trans.from !== i)) s.el.style.display = 'none'; }
-let lastNav = -9e9;
+/* EVENTS: what the engine did, in order. The recorder and the replay tests read these. */
+const EVENTS = [];
+function emit(type, data = {}){ EVENTS.push(Object.assign({ type, t: performance.now() }, data)); }
+let lastNav = -9e9, lastNavDir = 0, returnArmed = true;
+/* RETURN-STROKE LOCK (2026-11-01, found by the recorded-hands pipeline): after a swipe, the hand
+   travels back — and with reach amplification even a relaxed return crosses the swipe threshold,
+   so "next" was followed by an unwanted "previous". A swipe in the OPPOSITE direction only counts
+   once the hand has paused (or left the frame) after the last one: swipe · pause · swipe back.
+   A fixed timeout alone failed on a slow 1.6 s return, so the pause is what re-arms it. */
+const SWIPE_RETURN_LOCK = 1300;   // ms: never re-arm sooner than this
+const RETURN_STILL_MS = 250;      // the hand must be still this long to re-arm
+const STILL_SPEED = .25;          // "still" = palm slower than this × screen width per second
 function nav(d, now = performance.now()){
   if (!DECK) return false;
   const n = clamp(cur + d, 0, DECK.slides.length - 1);
   if (n === cur){ toast(d > 0 ? 'LAST SLIDE' : 'FIRST SLIDE'); return false; }
-  lastNav = now; releaseAll();
-  showSlide(n, d);
+  lastNav = now; lastNavDir = Math.sign(d); returnArmed = false; releaseAll();
+  showSlide(n, d); emit('nav', { d });
   toast(`${n + 1} / ${DECK.slides.length}`);
   return true;
 }
-function resetSlide(){
+function resetSlide(silent){
   const s = SLIDES[cur]; if (!s) return;
-  for (const p of s.pieces){ Object.assign(p.st, { tx: 0, ty: 0, tz: 0, ts: 1, tO: 1 }); p.w.classList.remove('held'); }
+  for (const p of s.pieces){ Object.assign(p.st, { tx: 0, ty: 0, tz: 0, ts: 1, tO: 1 }); p.w.classList.remove('held', 'focus'); }
   Object.assign(V, { eT: 0, yT: 0, pT: 0, focus: null, saved: null });
-  releaseAll();
-  toast('RESET');
+  releaseAll(); EX.out = false;
+  if (silent !== true){ toast('RESET'); emit('reset'); }
 }
 function focusPiece(p){
   const s = SLIDES[cur]; if (!s) return;
   if (!V.focus) V.saved = { eT: V.eT, yT: V.yT, pT: V.pT };
   if (V.focus && V.focus !== p) Object.assign(V.focus.st, { tx: V.focus.fx || 0, ty: V.focus.fy || 0, ts: V.focus.fs || 1, tz: 0 });
-  V.focus = p; p.w.classList.add('focus');
+  V.focus = p; p.w.classList.add('focus'); emit('focus');
   p.fx = p.st.tx; p.fy = p.st.ty; p.fs = p.st.ts;
   const sc = Math.min(DECK.w * .84 / p.d.w, DECK.h * .8 / p.d.h, 3.4);
   Object.assign(p.st, { tx: -p.cx - explodeOffset(p).x, ty: -p.cy - explodeOffset(p).y, ts: Math.max(1.05, sc), tz: 160 });
@@ -284,7 +329,7 @@ function unfocus(){
   Object.assign(p.st, { tx: p.fx || 0, ty: p.fy || 0, ts: p.fs || 1, tz: 0 });
   for (const q of SLIDES[cur].pieces) q.st.tO = 1;
   if (V.saved) Object.assign(V, V.saved);
-  V.focus = null; V.saved = null;
+  V.focus = null; V.saved = null; emit('unfocus');
 }
 function explodeOffset(p){ return { x: p.cx * .09 * V.eT, y: p.cy * .09 * V.eT + (p.rank > 1 ? 30 * V.eT : 0) }; }
 
@@ -318,7 +363,7 @@ function frame(now){
     const st = p.st, m = .2;
     st.x = lerp(st.x, st.tx, m); st.y = lerp(st.y, st.ty, m); st.z = lerp(st.z, st.tz, m); st.s = lerp(st.s, st.ts, m); st.o = lerp(st.o, st.tO, .15);
     const delay = p.bg ? 0 : Math.min(60 + p.k * 30, 820);
-    const a = ease((now - s.shownAt - delay) / 560);
+    const a = RENDER ? 1 : ease((now - s.shownAt - delay) / 560);
     let ox = 0, oy = 0, oz;
     if (p.bg || p.d.locked) oz = -e * 110;
     else { ox = p.cx * .09 * e; oy = p.cy * .09 * e; oz = e * (60 + Math.min(p.rank, 1) * 400); if (p.rank > 1) oy += 30 * e; }
@@ -355,7 +400,7 @@ function begin(slot, x, y, now = performance.now()){
   const p = V.focus ? null : pieceAt(x, y);
   const o = PT[slot] = { piece: p, x0: x, y0: y, lx: x, ly: y, t0: now, moved: 0, mode: p ? 'grab' : 'turn',
                          yaw0: V.yT, pitch0: V.pT };
-  if (p){ o.z0 = p.st.tz; o.tx0 = p.st.tx; o.ty0 = p.st.ty; p.st.tz += 140; p.w.classList.add('held'); }
+  if (p){ o.z0 = p.st.tz; o.tx0 = p.st.tx; o.ty0 = p.st.ty; p.st.tz += 140; p.w.classList.add('held'); emit('grab'); }
   return o;
 }
 function move(slot, x, y){
@@ -372,7 +417,7 @@ function move(slot, x, y){
 function end(slot, x, y, now = performance.now()){
   const o = PT[slot]; if (!o) return; delete PT[slot];
   const tap = now - o.t0 < 320 && o.moved < 26 && !o.noTap;
-  if (o.piece){ o.piece.w.classList.remove('held'); o.piece.st.tz = o.z0 || 0; }
+  if (o.piece){ o.piece.w.classList.remove('held'); o.piece.st.tz = o.z0 || 0; emit('release', { moved: Math.round(o.moved) }); }
   if (tap){
     if (V.focus) unfocus();
     else if (o.piece){ o.piece.st.tx -= 0; focusPiece(o.piece); }
@@ -383,6 +428,7 @@ function releaseAll(){ for (const k of Object.keys(PT)){ const o = PT[k]; if (o.
 /* TWO PINCHES: apart = explode, together = rebuild, twist = turn.
    If one hand is HOLDING a piece, the other hand's stretch resizes just that piece. */
 const TWO = { active: false };
+const EX = { out: false };
 function twoUpdate(a, b, now = performance.now()){
   if (!a || !b){ if (TWO.active){ TWO.active = false; for (const o of Object.values(PT)) o.noTap = true; } return; }
   const d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x);
@@ -408,6 +454,9 @@ function twoUpdate(a, b, now = performance.now()){
     const raw = TWO.e0 + Math.log(r) * .95;
     if (raw > 1 || raw < 0){ TWO.e0 = raw > 1 ? 1 : 0; TWO.d0 = d; }
     V.eT = clamp(raw, 0, 1);
+    // explode / rebuild as EVENTS, with hysteresis so a wobble at the edge is one event
+    if (!EX.out && V.eT >= .6){ EX.out = true; emit('explode'); }
+    else if (EX.out && V.eT <= .2){ EX.out = false; emit('rebuild'); }
     let da = ang - TWO.a0; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
     V.yT = clamp(TWO.yaw0 + da * 57.3 * .9, -70, 70);
   }
@@ -429,12 +478,13 @@ function px(p){
   return { x: W - (nx * MAP.sx + MAP.ox), y: ny * MAP.sy + MAP.oy };
 }
 const mkHand = () => ({ present: false, seen: 0, pinch: false, pinchN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
-                       oe: null, cur: null, m: null, hover: null, upT: 0 });
+                       oe: null, cur: null, m: null, hover: null, upT: 0, _pp: null, pp: null, movingT: null });
 const HANDS = [mkHand(), mkHand()];
 const assignHands = (lms) => assignSlots(lms, HANDS, px);   // identity-stable slots (camera path only)
 let lastPeace = -9e9;
 function dropHand(i){
   const st = HANDS[i];
+  if (st.present) returnArmed = true;            // the hand left the frame: the return stroke is over
   if (st.pinch) end('h' + i, st.cur ? st.cur.x : 0, st.cur ? st.cur.y : 0);
   if (st.hover) st.hover.w.classList.remove('hover');
   Object.assign(st, mkHand());
@@ -448,6 +498,11 @@ function ingestHands(raw, now = performance.now()){
     st.present = true; st.seen++; st.upT = now; st.m = m;
     const cur = st.cur = oneEuro(st, px(m.tip), now);
     const palm = px(m.palm);
+    // stillness re-arms the opposite swipe (see SWIPE_RETURN_LOCK)
+    const sp = st.pp ? Math.hypot(palm.x - st.pp.x, palm.y - st.pp.y) / Math.max(1, now - st.pp.t) * 1000 : 0;
+    st.pp = { x: palm.x, y: palm.y, t: now };
+    if (sp > STILL_SPEED * W || st.movingT == null) st.movingT = now;
+    if (!returnArmed && now - lastNav > SWIPE_RETURN_LOCK && now - st.movingT > RETURN_STILL_MS) returnArmed = true;
     st.trail.push({ x: cur.x, y: cur.y, t: now }); if (st.trail.length > 10) st.trail.shift();
     // hover highlight (what a pinch would grab right now)
     if (st.seen >= 3 && !st.pinch){
@@ -471,8 +526,9 @@ function ingestHands(raw, now = performance.now()){
         const dx = b.x - a.x, dy = b.y - a.y;
         if (Math.abs(dx) > Math.max(150, W * .17) && Math.abs(dy) < Math.abs(dx) * .6 && now - lastNav > 850
             && !HANDS.some(h => h.pinch)){
-          if (V.focus) unfocus(); else nav(dx < 0 ? 1 : -1, now);
-          st.swipe.length = 0; lastNav = now;
+          const dir = dx < 0 ? 1 : -1;
+          if (dir === -lastNavDir && !returnArmed){ st.swipe.length = 0; }   // the hand coming back
+          else { if (V.focus) unfocus(); else nav(dir, now); st.swipe.length = 0; lastNav = now; }
         }
       }
     } else st.swipe.length = 0;
@@ -480,12 +536,18 @@ function ingestHands(raw, now = performance.now()){
     if (m.peace && !st.pinch){ if (++st.peaceN === 8 && now - lastPeace > 1500){ lastPeace = now; resetSlide(); } }
     else st.peaceN = 0;
     // POINT = laser pointer for the audience
-    if (m.point && !st.pinch){ st.pointN++; if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
+    if (m.point && !st.pinch){ st.pointN++; if (st.pointN === 4) emit('laser'); if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
     else st.pointN = 0;
     while (st.laser.length && now - st.laser[0].t > 450) st.laser.shift();
   }
   const pa = HANDS[0].pinch && HANDS[0].cur, pb = HANDS[1].pinch && HANDS[1].cur;
   twoUpdate(pa || null, pb || null, now);
+}
+/* every tracker result enters here: the live camera, and replayed recordings */
+function onDetections(res, vw, vh, now = performance.now()){
+  updateMap(vw, vh);
+  if (REC.phase === 'rec') REC.capture(res, vw, vh, now);
+  ingestHands(assignHands(readDetections(res, HANDS).lms), now);   // score floor + ghost/phantom dedupe (shared)
 }
 function reapStale(){ const now = performance.now(); for (let i = 0; i < 2; i++) if (HANDS[i].present && now - HANDS[i].upT > 280) dropHand(i); }
 
@@ -552,9 +614,9 @@ async function startCamera(){
   const tick = () => {
     if (!camOn) return;
     if (cam.currentTime !== lastVideoT && cam.videoWidth){
-      lastVideoT = cam.currentTime; updateMap(cam.videoWidth, cam.videoHeight);
-      const res = landmarker.detectForVideo(cam, performance.now());
-      ingestHands(assignHands(readDetections(res, HANDS).lms));   // score floor + ghost/phantom dedupe (shared)
+      lastVideoT = cam.currentTime;
+      const now = performance.now();
+      onDetections(landmarker.detectForVideo(cam, now), cam.videoWidth, cam.videoHeight, now);
     }
     requestAnimationFrame(tick);
   };
@@ -634,9 +696,19 @@ async function probe(){
   const start = cur;
   // 1-2 swipes
   feed(6, () => [synthHand(.75, .6, 'open')]); feed(14, k => [synthHand(lerp(.75, .25, k), .6, 'open')]); clear();
-  ok('swipe-next', cur === start + 1, `${start}→${cur}`); T += 1000; await wait(900);
+  ok('swipe-next', cur === start + 1, `${start}→${cur}`); T += 1500; await wait(900);   // a deliberate back-swipe comes after the return lock
   feed(6, () => [synthHand(.25, .6, 'open')]); feed(14, k => [synthHand(lerp(.25, .75, k), .6, 'open')]); clear();
   ok('swipe-back', cur === start, `→${cur}`); T += 1000; await wait(1700);
+  // RETURN-STROKE LOCK: swipe next, then the hand sweeps straight back → still on the next slide
+  T += 700; feed(6, () => [synthHand(.75, .6, 'open')]); feed(14, k => [synthHand(lerp(.75, .25, k), .6, 'open')]);
+  T += 900; feed(14, k => [synthHand(lerp(.25, .75, k), .6, 'open')]); clear();   // past the 850 ms cooldown, inside the lock
+  ok('swipe-return-ignored', cur === start + 1, `${start}→${cur}`);
+  // …even a long return that is still moving after the time lock (no pause, no leaving the frame)
+  T += 300; feed(6, () => [synthHand(.75, .6, 'open')]); feed(14, k => [synthHand(lerp(.75, .25, k), .6, 'open')]);   // next
+  T += 1100; feed(62, k => [synthHand(lerp(.1, .9, k), .6, 'open')]); clear();                                       // 1 s sweep back
+  ok('swipe-slow-return-ignored', cur === start + 2, `${start}→${cur}`); T += 1000; showSlide(start + 1, 1, true); await wait(900);
+  T += 1400; feed(6, () => [synthHand(.25, .6, 'open')]); feed(14, k => [synthHand(lerp(.25, .75, k), .6, 'open')]); clear();
+  ok('swipe-back-after-lock', cur === start, `→${cur}`); T += 1000; await wait(1700);
   // 3-4 stretch apart / crush together
   feed(5, () => [synthHand(.45, .6, 'pinch'), synthHand(.55, .6, 'pinch')]);
   feed(20, k => [synthHand(lerp(.45, .2, k), .6, 'pinch'), synthHand(lerp(.55, .8, k), .6, 'pinch')]);
@@ -686,6 +758,14 @@ async function probe(){
   feed(6, () => [gap(.24)]); const real = HANDS[0].pinch; clear();
   ok('pinch-gate', real && !near, `near-miss pinched=${near} · real pinched=${real}`);
   if (V.focus) unfocus(); resetSlide();
+  // FAST HAND KEEPS ITS IDENTITY: through the CAMERA path (slot assignment), a palm jumping
+  // ~400 px per frame at the peak of a swipe must stay the same hand, not be dropped and reborn
+  { const det = (sx) => ({ landmarks: [synthImage(1 - sx, .6, 'open').map(p => ({ x: p.x, y: p.y }))], handednesses: [[{ score: .9 }]] });
+    for (let k = 0; k < 6; k++){ T += 33; onDetections(det(.8), 1280, 720, T); }
+    const seen0 = HANDS[0].seen;
+    for (const sx of [.74, .6, .42, .28, .22]){ T += 33; onDetections(det(sx), 1280, 720, T); }
+    ok('fast-hand-keeps-identity', HANDS[0].present && !HANDS[1].present && HANDS[0].seen === seen0 + 5, `slot0 seen +${HANDS[0].seen - seen0}, slot1 ${HANDS[1].present ? 'took it' : 'empty'}`);
+    onDetections({ landmarks: [] }, 1280, 720, T += 33); updateMap(0, 0); if (V.focus) unfocus(); showSlide(cur, 1, true); }
   // 14 keyboard
   const b4 = cur; T += 1000; dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); ok('key-next', cur === b4 + 1);
   // 15 every slide of the deck renders without a frame error
@@ -701,12 +781,167 @@ async function probe(){
 }
 
 /* ============================================================================
+   RECORD (?record=1) — a coach walks you through each gesture while the engine
+   runs live; what the tracker saw (hand points only, never images) is saved to
+   recordings/ on this computer. REPLAY (?replay=name) feeds a recording back
+   through onDetections exactly as the camera would and scores each take.
+   ========================================================================== */
+const REC = { phase: 'off', i: 0, takes: [], name: '', frames: [], t0: 0, ev0: 0, video: null, timer: 0 };
+const recEl = $('rec');
+function prepTake(take){                       // same starting state for recording and replay
+  if (V.focus) unfocus();
+  for (let i = 0; i < 2; i++) dropHand(i);
+  releaseAll();
+  showSlide(Math.min(take.slide, DECK.slides.length) - 1, 1, true);
+  resetSlide(true);
+  lastNav = lastPeace = -9e9; lastNavDir = 0; returnArmed = true;
+}
+REC.capture = (res, vw, vh, now) => { REC.video = { w: vw, h: vh }; REC.frames.push(encodeFrame(res, now - REC.t0)); };
+function recSave(){
+  const body = { version: FORMAT_VERSION, app: 'linkpresent', created: new Date().toISOString(), ua: navigator.userAgent,
+                 deck: DECK_NAME, takes: REC.takes };
+  return fetch('/api/recordings?name=' + encodeURIComponent(REC.name), { method: 'POST', body: JSON.stringify(body) })
+    .then(r => r.json()).then(j => { REC.saved = j.file || REC.saved; return j; }).catch(() => ({ error: 'save failed' }));
+}
+function recRender(){
+  const take = TAKES[REC.i];
+  const want = (t) => Object.entries(t.expect).filter(([k]) => k !== 'none').map(([k, n]) => `${k.replace('_', ' ')} ${n}`).join(' · ') || 'nothing should fire';
+  const btn = (label, fn, ghost) => { const b = el('button', ghost ? 'ghost' : null); b.textContent = label; b.onclick = fn; return b; };
+  recEl.innerHTML = '';
+  const k = el('div', 'k', recEl);
+  if (REC.phase === 'intro'){
+    k.textContent = 'Record your hands · ' + TAKES.length + ' short takes';
+    el('h2', null, recEl).textContent = 'Teach LinkPresent your real hands';
+    el('p', null, recEl).textContent = 'Each take asks for one gesture. Do it naturally, the way you would in a meeting. '
+      + 'Only the 21 hand points per frame are saved (no camera image), to the recordings folder on this computer.';
+    const row = el('div', 'row', recEl);
+    row.append(btn(camOn || window.__recTest ? 'START  (SPACE)' : 'WAITING FOR CAMERA…', recNext));
+  } else if (REC.phase === 'ready'){
+    k.textContent = `Take ${REC.i + 1} of ${TAKES.length}`;
+    el('h2', null, recEl).textContent = take.title;
+    el('p', null, recEl).textContent = take.say;
+    el('div', 'live', recEl).textContent = 'Goal: ' + want(take);
+    const row = el('div', 'row', recEl); row.style.marginTop = '10px';
+    row.append(btn('START  (SPACE)', recStart), btn('SKIP  (S)', recSkip, true));
+  } else if (REC.phase === 'count'){
+    k.textContent = `Take ${REC.i + 1} of ${TAKES.length} · ${take.title}`;
+    el('p', null, recEl).textContent = take.say;
+    const big = el('div', 'big', recEl); big.textContent = REC.count;
+  } else if (REC.phase === 'rec'){
+    k.innerHTML = `<span class="no">● REC</span> &nbsp;Take ${REC.i + 1} of ${TAKES.length} · ${take.title}`;
+    el('p', null, recEl).textContent = take.say;
+    const bar = el('div', 'bar', recEl); const fill = el('i', null, bar);
+    fill.style.width = Math.min(100, (performance.now() - REC.t0) / (take.secs * 10)) + '%';
+    const c = countEvents(EVENTS.slice(REC.ev0));
+    el('div', 'live', recEl).textContent = 'Engine saw: ' + (Object.entries(take.expect).filter(([k2]) => k2 !== 'none').map(([k2, n]) => `${k2.replace('_', ' ')} ${c[k2] || 0}/${n}`).join(' · ') || 'watching for false triggers');
+    const row = el('div', 'row', recEl); row.style.marginTop = '10px';
+    row.append(btn('DONE  (SPACE)', recStop));
+  } else if (REC.phase === 'review'){
+    const t = REC.pending;
+    k.textContent = `Take ${REC.i + 1} of ${TAKES.length} · ${take.title}`;
+    const v = el('h2', null, recEl); v.className = t.verdict.pass ? 'ok' : 'no';
+    v.textContent = t.verdict.pass ? 'The engine got it' : 'The engine missed something';
+    el('div', 'live', recEl).textContent = t.verdict.detail;
+    el('p', null, recEl).textContent = t.verdict.pass ? 'Keep it as a test.'
+      : 'If you did the gesture right, KEEP it: this is exactly the data that fixes the engine. Redo only if you made a mistake.';
+    const row = el('div', 'row', recEl);
+    row.append(btn('KEEP  (SPACE)', recKeep), btn('REDO  (R)', recRedo, true));
+  } else if (REC.phase === 'done'){
+    k.textContent = 'Recording saved';
+    el('h2', null, recEl).textContent = `${REC.takes.filter(t => t.verdict.pass).length} of ${REC.takes.length} gestures worked`;
+    const tb = el('table', null, recEl);
+    for (const t of REC.takes){ const tr = el('tr', null, tb);
+      el('td', t.verdict.pass ? 'ok' : 'no', tr).textContent = t.verdict.pass ? '✓' : '✗';
+      el('td', null, tr).textContent = t.title; el('td', 'live', tr).textContent = t.verdict.detail; }
+    const p = el('p', null, recEl);
+    p.innerHTML = 'Saved as <code></code>. Send that file to Claude (or commit it): each take becomes a test that runs in <code>python3 tools/check.py</code>.';
+    p.querySelector('code').textContent = REC.saved || ('recordings/' + REC.name + '.json.gz');
+    const row = el('div', 'row', recEl);
+    row.append(btn('RECORD AGAIN', () => { REC.takes = []; REC.i = 0; REC.name = recName(); REC.phase = 'ready'; recRender(); }, true));
+  }
+}
+const recName = () => 'hands-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, (m) => m === 'T' ? '-' : '');
+function recNext(){ if (!camOn && !window.__recTest) return; REC.phase = 'ready'; recRender(); }
+function recStart(){
+  const take = TAKES[REC.i]; prepTake(take);
+  REC.phase = 'count'; REC.count = 3; recRender();
+  const step = () => {
+    if (REC.phase !== 'count') return;
+    if (--REC.count > 0){ recRender(); REC.timer = setTimeout(step, 800); return; }
+    REC.phase = 'rec'; REC.frames = []; REC.t0 = performance.now(); REC.ev0 = EVENTS.length; recRender();
+    REC.timer = setTimeout(recStop, take.secs * 1000);
+    REC.tick = setInterval(() => REC.phase === 'rec' && recRender(), 250);
+  };
+  REC.timer = setTimeout(step, 1400);             // layers settle (same wait as replay), then 3-2-1
+}
+function recStop(){
+  if (REC.phase !== 'rec') return;
+  clearTimeout(REC.timer); clearInterval(REC.tick);
+  const take = TAKES[REC.i];
+  const live = countEvents(EVENTS.slice(REC.ev0));
+  REC.pending = { id: take.id, title: take.title, slide: take.slide, expect: take.expect, secs: take.secs,
+                  screen: { w: W, h: H }, video: REC.video, frames: REC.frames, live, verdict: evaluate(take.expect, live) };
+  REC.phase = 'review'; recRender();
+}
+function recKeep(){
+  REC.takes = REC.takes.filter(t => t.id !== REC.pending.id).concat([REC.pending]);
+  recSave();
+  recAdvance();
+}
+function recRedo(){ REC.phase = 'ready'; recRender(); }
+function recSkip(){ recAdvance(); }
+function recAdvance(){
+  REC.i++;
+  if (REC.i >= TAKES.length){ REC.phase = 'done'; recSave().then(recRender); }
+  else REC.phase = 'ready';
+  recRender();
+}
+function recKey(e){
+  if (!document.body.classList.contains('recording')) return false;
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k === 'enter'){
+    ({ intro: recNext, ready: recStart, rec: recStop, review: recKeep })[REC.phase]?.(); return true; }
+  if (k === 'r' && REC.phase === 'review'){ recRedo(); return true; }
+  if (k === 's' && REC.phase === 'ready'){ recSkip(); return true; }
+  return ['count', 'rec'].includes(REC.phase);    // swallow other keys mid-take
+}
+
+async function replay(name){
+  const out = window.__replay = { name, done: false, results: [] };
+  let rec;
+  try { const r = await fetch('/api/recordings/' + encodeURIComponent(name)); rec = await r.json(); if (!r.ok) throw new Error(rec.error); }
+  catch (e){ out.error = 'could not load recording: ' + (e.message || e); out.done = true; return; }
+  if (rec.deck && rec.deck !== DECK_NAME){ await loadDeck(rec.deck); }
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const frameWait = () => new Promise(r => requestAnimationFrame(r));
+  for (const take of rec.takes){
+    prepTake(take);
+    await wait(1400);
+    statusEl.textContent = `replaying ${take.id}…`;
+    const ev0 = EVENTS.length, frames = take.frames, vw = (take.video && take.video.w) || 1280, vh = (take.video && take.video.h) || 720;
+    const t0 = performance.now(); let k = 0;
+    while (k < frames.length){
+      await frameWait();
+      const el2 = performance.now() - t0;
+      while (k < frames.length && frames[k].t <= el2){ onDetections(decodeFrame(frames[k]), vw, vh, t0 + frames[k].t); k++; }
+    }
+    onDetections({ landmarks: [] }, vw, vh, performance.now());        // hands leave the frame
+    await wait(500);
+    const got = countEvents(EVENTS.slice(ev0));
+    const v = evaluate(take.expect, got);
+    out.results.push({ id: take.id, title: take.title, pass: v.pass, detail: v.detail, live: take.verdict });
+  }
+  out.done = true;
+  statusEl.textContent = `replay ${out.results.filter(r => r.pass).length}/${out.results.length}`;
+}
+
+/* ============================================================================
    MAIN LOOP, KEYS, MOUSE, DECK LOADING
    ========================================================================== */
 function loop(now){
   try {
     if (SIM) simTick(now);
-    else if (!PROBE) reapStale();
+    else if (!PROBE && !REPLAY) reapStale();
     frame(now); drawHud(now);
   } catch (e){ if (!window.__loopErr){ window.__loopErr = String(e && e.message || e); console.error(e); } }
   requestAnimationFrame(loop);
@@ -723,6 +958,7 @@ const KEYS = {
 };
 addEventListener('keydown', (e) => {
   if (e.target && e.target.tagName === 'SELECT') return;
+  if (recKey(e)){ e.preventDefault(); return; }
   const f = KEYS[e.key] || KEYS[e.key.toLowerCase && e.key.toLowerCase()];
   if (f && !e.metaKey && !e.ctrlKey && !e.altKey){ e.preventDefault(); f(); }
 });
@@ -778,20 +1014,30 @@ addEventListener('dragover', (e) => { e.preventDefault(); document.body.classLis
 addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
 addEventListener('drop', (e) => { e.preventDefault(); document.body.classList.remove('dragging'); upload(e.dataTransfer.files[0]); });
 
-window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ return DECK; }, nav, showSlide, resetSlide };
+window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ return DECK; }, nav, showSlide, resetSlide,
+  // test hooks: feed tracker results through the camera path; drive the recorder
+  feed: (res, vw = 1280, vh = 720) => onDetections(res, vw, vh), synthImage, EVENTS,
+  rec: { REC, recNext, recStart, recStop, recKeep, recSave, get phase(){ return REC.phase; } } };
 
 (async () => {
   if (Q.has('clean')) document.body.classList.add('clean');
+  if (RENDER) document.body.classList.add('render');
   setTimeout(() => document.body.classList.add('nolegend'), 20000);   // the help steps aside once you know it (? brings it back)
   applyView();
-  const want = Q.get('deck');
+  const want = Q.get('deck') || ((RECORD || REPLAY) ? 'velora-q3-2026-qbr.pptx' : null);
   const list = await refreshDeckList(want);
   if (!list.length){ $('empty').style.display = 'flex'; statusEl.textContent = 'no deck yet · drop a .pptx'; }
   else await loadDeck(want && list.some(d => d.name === want) ? want : list[0].name, parseInt(Q.get('slide') || '1', 10) || 1);
   requestAnimationFrame(loop);
   if (SIM){ statusEl.textContent = 'SIM · synthetic hands'; $('camBtn').classList.add('off'); $('camBtn').textContent = 'SIM'; }
   else if (PROBE){ $('camBtn').classList.add('off'); if (DECK) probe(); }
-  else startCamera();
+  else if (REPLAY){ $('camBtn').classList.add('off'); $('camBtn').textContent = 'REPLAY'; replay(REPLAY); }
+  else if (!RENDER) startCamera();
+  if (RECORD){
+    document.body.classList.add('recording'); REC.name = recName(); REC.phase = 'intro'; recRender();
+    const wait = setInterval(() => { if (camOn || window.__recTest){ clearInterval(wait); recRender(); } }, 500);
+  }
+  window.__ready = true;
 })();
 </script>
 </body></html>

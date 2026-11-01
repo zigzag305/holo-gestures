@@ -16,10 +16,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Playwright (test tool only — the app itself is stdlib)
+      - name: Install test tools (the app itself is stdlib only)
         run: |
-          pip install playwright==1.63.0
+          pip install playwright==1.63.0 pillow
           python -m playwright install --with-deps chromium
+          # fidelity reference renderer + fonts with Office-compatible widths
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-impress poppler-utils fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation
       - name: Run every check
         run: python tools/check.py
       - name: Keep the screenshots
@@ -27,5 +30,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: screenshots
-          path: state/check/
+          path: |
+            state/check/
+            state/fidelity/
           if-no-files-found: ignore
