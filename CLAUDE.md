@@ -21,9 +21,10 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `holo.html` | HOLO page: cards, physics, 3D props, reader, Jarvis voice, its sim + probe |
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
 | `tools/check.py` | every check in one command (runs `fidelity.py` too when LibreOffice + Poppler exist) |
-| `tools/fidelity.py` | slide-by-slide score vs a LibreOffice (or PowerPoint-PDF) reference → `state/fidelity/report.html` |
+| `tools/fidelity.py` | slide-by-slide score vs the deck's PowerPoint PDF (`decks/pdf/`), else LibreOffice → `state/fidelity/report.html` |
 | `recordings/` | real hand sessions (`?record=1`), replayed as tests by `check.py`; `synthetic-smoke` is simulated (`tools/make_synthetic_recording.js`) |
 | `decks/` | six fictional sample decks, each built a different way (see README *Sample decks*); the probe battery is written for `velora-q3-2026-qbr.pptx` |
+| `decks/pdf/` | PowerPoint's own PDF export of a deck (`<deck>.pdf`): the fidelity reference, preferred over LibreOffice |
 | `vendor/` | self-hosted MediaPipe + three.js |
 | `state/` | runtime output (gitignored): diag, hand state, `check/` screenshots |
 
@@ -52,7 +53,7 @@ python3 tools/check.py --all-slides
 ```
 Every check must pass. Then **open the screenshots and look at them**: a passing probe doesn't
 prove a slide looks right. For parser or renderer changes, open `state/fidelity/report.html` and
-check the worst slides; the score is a guide (LibreOffice has its own quirks), the pictures decide.
+check the worst slides; the score is a guide (LibreOffice-referenced decks have its quirks), the pictures decide.
 
 ## Conventions
 - **New gesture:** constant (if any) → rule in the page's `ingestHands` → a probe check that fails

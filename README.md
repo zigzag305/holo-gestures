@@ -213,12 +213,12 @@ PowerPoint files differ depending on what made them:
 
 ### Fidelity
 
-`python3 tools/fidelity.py` renders every slide twice — with LibreOffice as the reference and in
-LinkPresent's flat render mode — scores how many pixels agree, and writes
-`state/fidelity/report.html` (reference | LinkPresent | differences, worst slides first).
-LibreOffice is not PowerPoint and has quirks of its own, so treat the score as a guide. For a true
-reference, export your deck to PDF from PowerPoint and run
-`python3 tools/fidelity.py --pdf-dir folder-with-the-pdfs`.
+`python3 tools/fidelity.py` compares every slide with a reference and LinkPresent's flat render
+mode, scores how many pixels agree, and writes `state/fidelity/report.html` (reference |
+LinkPresent | differences, worst slides first). The reference is PowerPoint's own PDF export in
+`decks/pdf/<deck>.pdf` when there is one, otherwise a LibreOffice rendering (LibreOffice is not
+PowerPoint, so for those decks treat the score as a guide). To add a PowerPoint reference: open the
+deck in PowerPoint, File → Export → PDF, save it as `decks/pdf/<deck>.pdf`.
 
 ---
 

@@ -14,7 +14,7 @@ What it does
   4. saves screenshots to state/check/ (normal, pulled apart, meeting view)
   5. replays every recording in recordings/ (real hands, captured with /linkpresent?record=1)
      through the camera path and checks each take did what the person did
-  6. scores every slide against a LibreOffice reference (tools/fidelity.py) when LibreOffice
+  6. scores every slide against its PowerPoint PDF (decks/pdf/) or a LibreOffice reference (tools/fidelity.py) when LibreOffice
      and Poppler are installed; the side-by-side report lands in state/fidelity/report.html
 
 Prints PASS/FAIL per check and exits 0 only if everything passed.
@@ -250,7 +250,7 @@ def check_recordings(base):
 
 # ---------------------------------------------------------------- 6. fidelity
 def check_fidelity(base, threshold):
-    print("\nFidelity vs a LibreOffice reference (tools/fidelity.py)")
+    print("\nFidelity vs PowerPoint PDFs in decks/pdf/, else LibreOffice (tools/fidelity.py)")
     import fidelity
     miss = fidelity.tools_missing()
     if miss:
