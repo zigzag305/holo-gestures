@@ -5,15 +5,16 @@
     python3 tools/fidelity.py --deck brisa-hotels-campaign-pitch.pptx
     python3 tools/fidelity.py --threshold 0.9     # fail below 90% match (default 80%)
 
-For every slide it renders a REFERENCE with LibreOffice (pptx → PDF → PNG) and the same slide in
+For every slide it takes a REFERENCE — the deck's PowerPoint-exported PDF in decks/pdf/<deck>.pdf when
+there is one, otherwise a LibreOffice rendering (pptx → PDF → PNG) — and renders the same slide in
 LinkPresent's flat render mode (/linkpresent?render=1), at the same pixel size, and scores the
 match. Writes state/fidelity/report.html: reference | LinkPresent | difference, worst slides first.
 
 The score is the share of pixels that agree once both images are shrunk to 320 px wide and
 softened, so it measures layout, colour and what is on the slide, not font anti-aliasing.
-It is a guide, not a verdict: LibreOffice is not PowerPoint and has quirks of its own. Look at
-the report; for a true PowerPoint reference, export the deck to PDF from PowerPoint and pass
---pdf-dir with a folder of <deck>.pdf files.
+It is a guide, not a verdict: LibreOffice is not PowerPoint and has quirks of its own, so a
+PowerPoint PDF beats it. To add one: open the deck in PowerPoint, File → Export → PDF, save it as
+decks/pdf/<deck>.pdf (same name as the .pptx). --pdf-dir points at another folder of them.
 
 Needs (test-only): Playwright, LibreOffice (`soffice`) and Poppler (`pdftoppm`).
   macOS:  brew install --cask libreoffice && brew install poppler
@@ -33,6 +34,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "state", "fidelity")
+DEFAULT_PDF_DIR = os.path.join(ROOT, "decks", "pdf")   # PowerPoint exports, preferred over LibreOffice
 SCORE_W = 320          # compare at this width
 TOLERANCE = 40         # per-channel difference still counted as "the same"
 
@@ -62,19 +64,29 @@ def tools_missing():
     return miss
 
 
+def reference_pdf(deck_path, pdf_dir=None):
+    """The PowerPoint-exported PDF for this deck, if one exists (--pdf-dir, else decks/pdf/)."""
+    stem = os.path.splitext(os.path.basename(deck_path))[0]
+    for d in (pdf_dir, DEFAULT_PDF_DIR):
+        if d and os.path.exists(os.path.join(d, stem + ".pdf")):
+            return os.path.join(d, stem + ".pdf")
+    return None
+
+
 def reference_pngs(deck_path, w, h, pdf_dir=None):
-    """PNG per visible slide at w×h, cached in state/fidelity/ref/<stem>/ until the deck changes."""
+    """PNG per visible slide at w×h, cached in state/fidelity/ref/<stem>/ until the deck or its PDF changes."""
     stem = os.path.splitext(os.path.basename(deck_path))[0]
     ref = os.path.join(OUT, "ref", stem)
     stamp = os.path.join(ref, ".stamp")
-    key = f"{os.path.getmtime(deck_path)}:{w}x{h}:{pdf_dir or ''}"
+    known = reference_pdf(deck_path, pdf_dir)
+    key = f"{os.path.getmtime(deck_path)}:{w}x{h}:{known or 'libreoffice'}:{os.path.getmtime(known) if known else ''}"
     if os.path.exists(stamp) and open(stamp).read() == key:
         return sorted(os.path.join(ref, f) for f in os.listdir(ref) if f.endswith(".png"))
     shutil.rmtree(ref, ignore_errors=True)
     os.makedirs(ref)
     with tempfile.TemporaryDirectory(prefix="holo-fid-") as tmp:
-        pdf = os.path.join(pdf_dir, stem + ".pdf") if pdf_dir else None
-        if not pdf or not os.path.exists(pdf):
+        pdf = known
+        if not pdf:
             profile = os.path.join(tmp, "profile")
             env = dict(os.environ, SAL_USE_VCLPLUGIN="svp")
             subprocess.run([find_soffice(), f"-env:UserInstallation=file://{profile}", "--headless",
