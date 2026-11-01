@@ -23,6 +23,7 @@ The app itself needs only Python. This test tool also needs Playwright:
     pip install playwright && python3 -m playwright install chromium
 """
 import argparse
+import re
 import json
 import os
 import socket
@@ -241,7 +242,8 @@ def check_recordings(base):
             for t in r["results"]:
                 live = t.get("live") or {}
                 was = "" if live.get("pass", True) == t["pass"] else (" · was failing when recorded" if t["pass"] else " · passed when recorded")
-                report(f"  {name} · {t['id']}", t["pass"], t["detail"] + was)
+                rev = " · goal revised: " + re.split(r"[:.;]| — ", t["revised"])[0][:90] if t.get("revised") else ""
+                report(f"  {name} · {t['id']}", t["pass"], t["detail"] + was + rev)
             report(f"replay {name}", all(t["pass"] for t in r["results"]) and not errs,
                    f"{sum(t['pass'] for t in r['results'])}/{len(r['results'])} takes" + (f" · page error: {errs[0]}" if errs else ""))
             pg.close()

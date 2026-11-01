@@ -999,7 +999,9 @@ async function replay(name){
   if (rec.deck && rec.deck !== DECK_NAME){ await loadDeck(rec.deck); }
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   const frameWait = () => new Promise(r => requestAnimationFrame(r));
+  const only = Q.get('only') ? Q.get('only').split(',') : null;   // ?only=swipe-next,grab replays just those takes
   for (const take of rec.takes){
+    if (only && !only.includes(take.id)) continue;
     prepTake(take);
     await wait(1400);
     statusEl.textContent = `replaying ${take.id}…`;
@@ -1014,8 +1016,9 @@ async function replay(name){
     await wait(500);
     onDetections({ landmarks: [] }, vw, vh, performance.now());        // …and stay gone past HOLD_GRACE_MS
     const got = countEvents(EVENTS.slice(ev0));
-    const v = evaluate(take.expect, got);
-    out.results.push({ id: take.id, title: take.title, pass: v.pass, detail: v.detail, live: take.verdict });
+    const v = evaluate((take.revised && take.revised.expect) || take.expect, got);   // see REVISED TAKES in recorder.js
+    out.results.push({ id: take.id, title: take.title, pass: v.pass, detail: v.detail, live: take.verdict, revised: take.revised ? take.revised.why : null,
+      events: EVENTS.slice(ev0).map(e => Object.assign({}, e, { t: Math.round(e.t - t0) })) });   // what fired, ms into the take
   }
   out.done = true;
   statusEl.textContent = `replay ${out.results.filter(r => r.pass).length}/${out.results.length}`;

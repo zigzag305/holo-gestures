@@ -8,7 +8,11 @@
    Format (stored gzipped as recordings/<name>.json.gz by server.py):
    { version, app, created, ua, deck, takes: [{ id, title, slide, expect,
        screen: {w, h}, video: {w, h}, frames: [{ t, h: [[score, x0, y0, … x20, y20], …], c: 'LR' }],
-       live: {counts}, verdict: {pass, detail} }] }
+       live: {counts}, verdict: {pass, detail}, revised?: {expect, why, date} }] }
+
+   REVISED TAKES: when a gesture is redesigned, a take performed the old way can't meet its old goal.
+   The frames are never edited; the take gets `revised` (a new goal + why + date) and replays are
+   judged on that. Usually it becomes a guard: the old movement must now fire nothing.
    ========================================================================== */
 
 export const FORMAT_VERSION = 1;
@@ -84,11 +88,12 @@ export function countEvents(events){
 export function evaluate(expect, counts){
   const bad = [];
   for (const [k, n] of Object.entries(expect)){
-    if (k === 'none') continue;
+    if (k === 'none' || k === 'exact') continue;
     const got = counts[k] || 0;
-    if (EXACT.has(k) ? got !== n : got < n) bad.push(`${k} ${got}/${n}`);
+    const exact = expect.exact ? expect.exact.includes(k) : EXACT.has(k);   // a revised goal may relax "exactly"
+    if (exact ? got !== n : got < n) bad.push(`${k} ${got}/${n}`);
   }
   for (const k of expect.none || []) if (counts[k]) bad.push(`unwanted ${k} ×${counts[k]}`);
-  const shown = Object.keys(expect).filter(k => k !== 'none').map(k => `${k} ${counts[k] || 0}`);
+  const shown = Object.keys(expect).filter(k => k !== 'none' && k !== 'exact').map(k => `${k} ${counts[k] || 0}`);
   return { pass: !bad.length, detail: bad.length ? bad.join(' · ') : (shown.join(' · ') || 'nothing fired') };
 }
