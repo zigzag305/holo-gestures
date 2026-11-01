@@ -137,12 +137,18 @@ so bars grow in and doughnut slices pop out when the slide comes apart.
 | **Swipe** an open hand ← / → | next / previous slide (to go back right after, pause first: the hand's return stroke is ignored) |
 | **Two pinches**, pull apart | the slide comes apart into floating layers |
 | **Two pinches**, together | it rebuilds · **twist** = turn the hologram |
-| **Pinch** a piece | grab it out of the slide and move it |
+| **Pinch** a piece (thumb and index touching) | grab it out of the slide and move it; open your fingers to drop it |
 | …and **stretch with the other hand** | resize just that piece |
 | **Tap** (quick pinch) a piece | focus: it flies to the front, everything else dims · tap again = back |
 | **Point** (index finger) | red laser pointer for the audience |
 | Pinch empty space and drag | turn the slide in 3D |
 | **Peace ✌** held | reset the slide |
+
+**On screen:** the page opens with a card for each gesture (**?** hides it and brings it back).
+While you present, the ring at your fingertip fills as thumb and index close (full = pinched), and
+a label under it says what LinkPresent sees: *open*, *pinch to grab*, *holding chart*, *point*… —
+so you learn the poses fast, and a misread shows the moment it happens. Meeting view hides the labels.
+A grab holds through brief tracking glitches: one misread frame, or the hand lost for a split second.
 
 Keys work too (presenter clickers send these): **← →** / PageUp / PageDown · **E** explode ·
 **R** reset · **O** meeting view (hides all controls) · **N** speaker notes · **C** camera
@@ -175,7 +181,7 @@ and column + line combos on two axes), theme colours, hidden slides, speaker not
 SmartArt internals, embedded video, EMF/WMF pictures; table styles are approximated.
 
 Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**21/21**) ·
+`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**23/23**) ·
 `/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat ·
 `/linkpresent?record=1` records your hands · `/linkpresent?replay=<name>` replays a recording.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.

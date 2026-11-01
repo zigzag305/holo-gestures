@@ -15,6 +15,13 @@ export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
    Relaxed 2026-08-30: .22 needed fingers literally touching; the original 'too
    sensitive' complaint was GHOST hands (now deduped), not this number. */
 export const PINCH_IN = .30, PINCH_OUT = .42, PINCH_EARN = 2;
+/* Letting go is earned too (2026-11-01, first real LinkPresent session: "a lot of glitching when
+   grabbing something, moving it"). A held pinch ended on ONE frame read past PINCH_OUT, and the
+   tracker misreads the thumb for a frame whenever the hand moves fast, so the piece dropped and
+   was re-grabbed mid-drag. Release now needs PINCH_LET_GO frames in a row (~2 camera frames, too
+   short to feel), and a HOLDING hand the tracker loses for a moment keeps its grip for
+   HOLD_GRACE_MS instead of dropping the piece. Confirm both against a real recording. */
+export const PINCH_LET_GO = 2, HOLD_GRACE_MS = 160;
 
 /* green-dot forensics: a PERSISTENT false detection (a face, a lamp) survives the
    render gate — hands smaller than 2.5% of frame are background noise. */

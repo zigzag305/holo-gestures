@@ -3,7 +3,12 @@
 Open work, in order. Update this file as things land; `CLAUDE.md` holds only what stays true.
 
 ## Next
-1. **Real hands as tests.** Built: `?record=1` coach, `recordings/`, replay in `check.py`. Open: the first
+1. **Real hands as tests.** First live session (2026-11-01): the gestures weren't clear and grabs
+   glitched. Shipped: on-screen gesture cards, a live label + pinch meter at each fingertip, and a
+   grab that survives one misread frame (`PINCH_LET_GO`) or a brief tracking loss (`HOLD_GRACE_MS`).
+   Both rules came from the description, not a recording: confirm them with the first real one.
+   HOLO (`holo.html`) still drops a grab on one bad frame; adopt the same rule there once confirmed.
+   Also built: `?record=1` coach, `recordings/`, replay in `check.py`. Open: the first
    real session. *Needs: a 10-minute webcam session at /linkpresent?record=1, then the file.*
    Questions it answers: do relaxed hands or fists fire grabs ("rest" take)? Do two hands raised close
    together get merged by the ghost filter ("pull-apart")? Is the swipe threshold right for real arms?
