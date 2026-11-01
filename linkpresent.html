@@ -167,18 +167,18 @@
 <div id="notes"><b>SPEAKER NOTES</b><span></span></div>
 <div id="counter"></div>
 <div id="legend">
-  <div class="gh">Gestures <span>one hand, palm to the camera · press ? to hide / show</span></div>
+  <div class="gh">Gestures <span>a curled or resting hand does nothing · press ? to hide / show</span></div>
   <div class="cards">
-    <div class="card"><i>✋</i><b>Swipe</b>Open hand, sweep it sideways, fast.<u>← next slide · → previous</u></div>
-    <div class="card"><i>🤏</i><b>Grab</b>Touch thumb and index on a piece, move, open to drop.<u>pull a piece out</u></div>
-    <div class="card"><i>🤏</i><b>Tap</b>A quick pinch on a piece, then open.<u>bring it to the front · tap again = back</u></div>
+    <div class="card"><i>✋ ←</i><b>Next slide</b>RIGHT hand open, sweep it to the left.<u>moving it back does nothing</u></div>
+    <div class="card"><i>→ ✋</i><b>Previous slide</b>LEFT hand open, sweep it to the right.<u>moving it back does nothing</u></div>
+    <div class="card"><i>👌</i><b>Grab</b>Thumb and index touching, other three fingers UP. Move, open to drop.<u>pull a piece out</u></div>
+    <div class="card"><i>👌</i><b>Tap</b>A quick 👌 on a piece, then open.<u>bring it to the front · again = back</u></div>
+    <div class="card"><i>👌 ↔ 👌</i><b>Pull apart</b>👌 with both hands, move them apart.<u>layers explode · together = rebuild · twist = turn</u></div>
+    <div class="card"><i>👌 + 👌</i><b>Resize</b>Hold a piece with 👌, 👌 with the other hand and stretch.<u>bigger / smaller</u></div>
     <div class="card"><i>☝️</i><b>Point</b>Index finger out, other fingers folded.<u>laser pointer</u></div>
-    <div class="card"><i>🤏 🤏</i><b>Pull apart</b>Pinch with both hands and pull them apart.<u>explode the layers · together = rebuild</u></div>
-    <div class="card"><i>🤏↻🤏</i><b>Twist</b>Both hands pinched, one goes up, one goes down.<u>turn the slide in 3D</u></div>
-    <div class="card"><i>🤏 + 🤏</i><b>Resize</b>Hold a piece, pinch with the other hand and stretch.<u>bigger / smaller</u></div>
     <div class="card"><i>✌️</i><b>Reset</b>Hold a peace sign for one second.<u>everything back in place</u></div>
   </div>
-  <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close: full = pinched. The label shows what LinkPresent sees.
+  <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close; with the other fingers up, full = 👌. The label shows what LinkPresent sees.
     <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen</div>
 </div>
 <div id="guideChip">✋ GESTURES · ?</div>
@@ -600,14 +600,15 @@ function reapStale(){ const now = performance.now(); for (let i = 0; i < 2; i++)
 function poseLabel(st, i){
   const m = st.m, held = PT['h' + i];
   if (st.pinch){
-    if (TWO.active) return TWO.piece ? '🤏 resize' : '🤏 pull apart · twist';
-    if (held && held.piece) return '🤏 holding ' + (held.piece.d.kind === 'chart' ? 'chart' : held.piece.d.kind === 'pic' ? 'picture' : held.piece.d.kind === 'table' ? 'table' : 'piece');
-    return '🤏 turning the slide';
+    if (TWO.active) return TWO.piece ? '👌 resize' : '👌 pull apart · twist';
+    if (held && held.piece) return '👌 holding ' + (held.piece.d.kind === 'chart' ? 'chart' : held.piece.d.kind === 'pic' ? 'picture' : held.piece.d.kind === 'table' ? 'table' : 'piece');
+    return '👌 turning the slide';
   }
   if (!m) return '';
+  if (m.pinch < PINCH_IN && st.hover) return '✊ lift the other 3 fingers to grab';   // curled pinch: on purpose not a grab (PINCH_FINGERS_UP)
   if (st.peaceN > 0) return '✌ hold to reset';
   if (m.point) return '☝ point';
-  if (st.hover) return (m.openish ? '✋' : '·') + ' pinch to grab';
+  if (st.hover) return (m.openish ? '✋' : '·') + ' 👌 to grab';
   if (m.openish) return '✋ open';
   if (m.fist) return '✊ fist';
   return '';
