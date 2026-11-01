@@ -94,16 +94,25 @@ Subfolders become orbs, files become the cards you pinch out of the air. It ship
 
 ## 🛠 Make it yours
 
-It's one readable HTML file plus a small Python server, MIT licensed. Every gesture threshold
-is a named constant near the top of `holo.html` (`PINCH_IN`, `PINCH_OUT`, `PINCH_EARN`, `AMP`).
+Readable HTML pages, a few plain JavaScript modules and a small Python server, MIT licensed —
+no build step. The hand engine both pages share lives in `js/hands.js`, and every gesture
+threshold is a named constant there (`PINCH_IN`, `PINCH_OUT`, `PINCH_EARN`, `AMP`).
 
 - `?sim=1` — a scripted demo plays with synthetic hands, no camera needed
 - `?probe=1` — the built-in test battery runs the real engine on synthetic frames (**26/26**)
 - `HOLO_PORT=4891 python3 server.py` — run it on another port
 - The mouse works as a fallback everywhere
 
-Change something, then run `?probe=1` and make sure it still says 26/26. That's the whole
-workflow.
+Change something, then run every check with one command:
+
+```bash
+pip install playwright && python3 -m playwright install chromium   # once — only the tests need it
+python3 tools/check.py          # parser, server, both test batteries, screenshots in state/check/
+python3 tools/check.py --quick  # no browser, a few seconds
+```
+
+It prints PASS/FAIL per check and exits non-zero on any failure. GitHub runs the same command
+on every pull request.
 
 ---
 
@@ -161,7 +170,7 @@ speaker notes. **What doesn't:** PowerPoint's own animations and transitions (Li
 motion), SmartArt internals, embedded video, EMF/WMF pictures, table styles.
 
 Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1` runs the gesture test battery (**16/16**) · `/linkpresent?clean=1` opens in meeting view.
+`/linkpresent?probe=1` runs the gesture test battery (**17/17**) · `/linkpresent?clean=1` opens in meeting view.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
 
 ---

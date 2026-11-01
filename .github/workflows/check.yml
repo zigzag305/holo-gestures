@@ -1,0 +1,31 @@
+name: check
+
+# Runs tools/check.py (parser, server routes, both probe batteries, screenshots)
+# on every pull request and every push to main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright (test tool only — the app itself is stdlib)
+        run: |
+          pip install playwright==1.63.0
+          python -m playwright install --with-deps chromium
+      - name: Run every check
+        run: python tools/check.py
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: state/check/
+          if-no-files-found: ignore
