@@ -7,6 +7,7 @@
 //
 // Simulated performance: 30 fps with ±5 ms timing jitter and ~0.2% landmark noise, hands leaving
 // the frame between gestures, and a slow hand return after one swipe (must NOT count as a swipe).
+// Pinches are 👌 (synthHand's pinch keeps the other fingers up); back swipes use the left hand.
 const { chromium } = require('playwright');
 const BASE = process.argv[2] || 'http://localhost:4890';
 
@@ -32,12 +33,14 @@ const BASE = process.argv[2] || 'http://localhost:4890';
       const nx = (W - x - ox) / sx, ny = (y - oy) / sy; return { fx: 1 - (.5 + (nx - .5) / AMP), fy: .5 + (ny - .5) / AMP }; };
     const handAtTip = (x, y, pose) => { const f = toImg(x, y), o = tipOffset(pose); return hand(f.fx - o.dx, f.fy - o.dy, pose); };
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-    const feedFor = async (ms, fn) => {          // fn(k in 0..1) → [hands]
+    // fn(k in 0..1) → [hands]; labs = the tracker's Left/Right label per hand (default: one hand is
+    // the right hand; two hands are right, left)
+    const feedFor = async (ms, fn, labs) => {
       const t0 = performance.now();
       for (;;){
         const k = Math.min(1, (performance.now() - t0) / ms);
         const hs = fn(k) || [];
-        H.feed({ landmarks: hs, handednesses: hs.map((h, i) => [{ score: .9, categoryName: hs.length === 2 ? (i ? 'Left' : 'Right') : 'Right' }]) }, VW, VH);
+        H.feed({ landmarks: hs, handednesses: hs.map((h, i) => [{ score: .9, categoryName: labs ? labs[i] : hs.length === 2 ? (i ? 'Left' : 'Right') : 'Right' }]) }, VW, VH);
         if (k >= 1) break;
         await sleep(33 + (rnd() - .5) * 10);
       }
@@ -59,9 +62,10 @@ const BASE = process.argv[2] || 'http://localhost:4890';
           if (r === 1) await feedFor(1600, k => [hand(lerp(.22, .78, k), .6, 'open')]);   // slow return: not a swipe
           else await none(700);
           await sleep(500); } },
+      // back is the LEFT hand sweeping right (SWIPES ARE PER HAND in js/hands.js)
       'swipe-back': async () => { for (let r = 0; r < 3; r++){
-          await feedFor(400, () => [hand(.22, .58, 'open')]);
-          await feedFor(320, k => [hand(lerp(.22, .78, ease(k)), .58, 'open')]);
+          await feedFor(400, () => [hand(.22, .58, 'open')], ['Left']);
+          await feedFor(320, k => [hand(lerp(.22, .78, ease(k)), .58, 'open')], ['Left']);
           await none(900); } },
       'pull-apart': async () => { for (let r = 0; r < 2; r++){
           // hands start ~2 hand-widths apart: closer than ~1.35 the ghost filter (js/hands.js) merges a NEW pair
