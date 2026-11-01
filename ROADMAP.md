@@ -3,15 +3,16 @@
 Open work, in order. Update this file as things land; `CLAUDE.md` holds only what stays true.
 
 ## Next
-1. **Real hands as tests.** First live session (2026-11-01): the gestures weren't clear and grabs
-   glitched. Shipped: on-screen gesture cards, a live label + pinch meter at each fingertip, and a
-   grab that survives one misread frame (`PINCH_LET_GO`) or a brief tracking loss (`HOLD_GRACE_MS`).
-   Both rules came from the description, not a recording: confirm them with the first real one.
-   HOLO (`holo.html`) still drops a grab on one bad frame; adopt the same rule there once confirmed.
-   Also built: `?record=1` coach, `recordings/`, replay in `check.py`. Open: the first
-   real session. *Needs: a 10-minute webcam session at /linkpresent?record=1, then the file.*
-   Questions it answers: do relaxed hands or fists fire grabs ("rest" take)? Do two hands raised close
-   together get merged by the ghost filter ("pull-apart")? Is the swipe threshold right for real arms?
+1. **Real hands as tests.** First real recording in: `recordings/hands-20261101-1135` (Intel Mac, ~18 fps).
+   Live it went 1/8; the engine now replays it 8/8. What it changed (all in `js/hands.js` + LinkPresent):
+   a pinch must be 👌 (curled hands at rest and pointing at the screen read as pinches); swipes are per
+   hand (wind-ups and returns fired the wrong way); hand labels by majority; a lone fast hand keeps its
+   identity, but never swallows the other hand; a blurred frame doesn't cancel a swipe; pull-apart
+   is measured in screen width (wide-start hands couldn't explode/rebuild).
+   *Needs: re-record grab, tap and swipe-back the new way* (👌; left hand for back): those takes were
+   done with the old gestures and are kept as guards (see their `revised` notes).
+   Open questions: the laser fires while talking (pointing at rest, 7× in 12 s); a grab while the
+   slide is exploded; HOLO (`holo.html`) still uses the old pinch and drops grabs on one bad frame.
 2. **PowerPoint as the reference.** Done: five sample decks exported from PowerPoint into `decks/pdf/`;
    `tools/fidelity.py` scores against those and falls back to LibreOffice for decks without one
    (still `velora-q3-2026-qbr`). First PowerPoint comparison (2026-11-01): 35/35 slides ≥ 80%.

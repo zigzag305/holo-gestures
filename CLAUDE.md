@@ -67,6 +67,8 @@ check the worst slides; the score is a guide (LibreOffice-referenced decks have 
   hooks). Engine reactions are `emit()`ted as events; recordings and replays are judged on those.
 - **Recordings decide tuning.** A real recording that fails is a bug report with a repro: fix the
   engine until its replay passes, and keep the file. Never tune thresholds on synthetic hands alone.
+  Never edit a recording's frames. A take done as a gesture that has since changed gets a `revised`
+  goal (`{expect, why, date}`, see `js/recorder.js`) — usually a guard that the old movement fires nothing.
 - **PowerPoint defaults:** where a file is silent, follow PowerPoint, not taste — theme accents for
   chart colours, the chart-wide text size, inherited bodyPr from layout placeholders.
 - Commits: small, one concern each, message says what changed and how it was verified.

@@ -8,7 +8,11 @@
    Format (stored gzipped as recordings/<name>.json.gz by server.py):
    { version, app, created, ua, deck, takes: [{ id, title, slide, expect,
        screen: {w, h}, video: {w, h}, frames: [{ t, h: [[score, x0, y0, … x20, y20], …], c: 'LR' }],
-       live: {counts}, verdict: {pass, detail} }] }
+       live: {counts}, verdict: {pass, detail}, revised?: {expect, why, date} }] }
+
+   REVISED TAKES: when a gesture is redesigned, a take performed the old way can't meet its old goal.
+   The frames are never edited; the take gets `revised` (a new goal + why + date) and replays are
+   judged on that. Usually it becomes a guard: the old movement must now fire nothing.
    ========================================================================== */
 
 export const FORMAT_VERSION = 1;
@@ -21,20 +25,20 @@ export const TAKES = [
   { id: 'rest', icon: '🙌', title: 'Just present', secs: 12, slide: 5,
     say: 'Keep both hands in view and talk as you would in a meeting. Move naturally. No gestures.',
     expect: { none: ['nav', 'reset', 'explode', 'grab', 'focus'] } },
-  { id: 'swipe-next', icon: '✋', title: 'Next slide', secs: 15, slide: 3,
-    say: 'Swipe an open hand from right to left, 3 times. Pause a second between swipes.',
+  { id: 'swipe-next', icon: '✋ ←', title: 'Next slide', secs: 15, slide: 3,
+    say: 'RIGHT hand open: sweep it from right to left, 3 times. Pause a second between swipes.',
     expect: { nav_next: 3, none: ['nav_prev', 'explode', 'reset'] } },
-  { id: 'swipe-back', icon: '✋', title: 'Previous slide', secs: 15, slide: 9,
-    say: 'Swipe an open hand from left to right, 3 times. Pause a second between swipes.',
+  { id: 'swipe-back', icon: '→ ✋', title: 'Previous slide', secs: 15, slide: 9,
+    say: 'LEFT hand open: sweep it from left to right, 3 times. Pause a second between swipes.',
     expect: { nav_prev: 3, none: ['nav_next', 'explode', 'reset'] } },
-  { id: 'pull-apart', icon: '🤏 🤏', title: 'Pull the slide apart', secs: 18, slide: 5,
-    say: 'Raise both hands, pinch with both, pull them apart, then bring them back together. Twice.',
+  { id: 'pull-apart', icon: '👌 👌', title: 'Pull the slide apart', secs: 18, slide: 5,
+    say: 'Both hands 👌 (thumb and index touching, other fingers up), pull them apart, then bring them back together. Twice.',
     expect: { explode: 2, rebuild: 2, none: ['nav', 'reset'] } },
-  { id: 'grab', icon: '🤏', title: 'Grab a piece', secs: 15, slide: 5,
-    say: 'Pinch the chart, drag it somewhere, let go. 3 times.',
+  { id: 'grab', icon: '👌', title: 'Grab a piece', secs: 15, slide: 5,
+    say: '👌 on the chart (thumb and index touching, other three fingers UP), drag it somewhere, open to let go. 3 times.',
     expect: { grab_moved: 3, none: ['nav', 'reset', 'explode'] } },
-  { id: 'tap', icon: '🤏', title: 'Tap to bring forward', secs: 15, slide: 2,
-    say: 'Quick pinch on a card: it jumps to the front. Quick pinch again: it goes back. Twice.',
+  { id: 'tap', icon: '👌', title: 'Tap to bring forward', secs: 15, slide: 2,
+    say: 'Quick 👌 on a card, then open: it jumps to the front. Quick 👌 again: it goes back. Twice.',
     expect: { focus: 2, unfocus: 2, none: ['nav', 'reset'] } },
   { id: 'point', icon: '☝️', title: 'Laser pointer', secs: 10, slide: 5,
     say: 'Point with your index finger and circle things on the slide.',
@@ -84,11 +88,12 @@ export function countEvents(events){
 export function evaluate(expect, counts){
   const bad = [];
   for (const [k, n] of Object.entries(expect)){
-    if (k === 'none') continue;
+    if (k === 'none' || k === 'exact') continue;
     const got = counts[k] || 0;
-    if (EXACT.has(k) ? got !== n : got < n) bad.push(`${k} ${got}/${n}`);
+    const exact = expect.exact ? expect.exact.includes(k) : EXACT.has(k);   // a revised goal may relax "exactly"
+    if (exact ? got !== n : got < n) bad.push(`${k} ${got}/${n}`);
   }
   for (const k of expect.none || []) if (counts[k]) bad.push(`unwanted ${k} ×${counts[k]}`);
-  const shown = Object.keys(expect).filter(k => k !== 'none').map(k => `${k} ${counts[k] || 0}`);
+  const shown = Object.keys(expect).filter(k => k !== 'none' && k !== 'exact').map(k => `${k} ${counts[k] || 0}`);
   return { pass: !bad.length, detail: bad.length ? bad.join(' · ') : (shown.join(' · ') || 'nothing fired') };
 }

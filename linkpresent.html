@@ -167,18 +167,18 @@
 <div id="notes"><b>SPEAKER NOTES</b><span></span></div>
 <div id="counter"></div>
 <div id="legend">
-  <div class="gh">Gestures <span>one hand, palm to the camera · press ? to hide / show</span></div>
+  <div class="gh">Gestures <span>a curled or resting hand does nothing · press ? to hide / show</span></div>
   <div class="cards">
-    <div class="card"><i>✋</i><b>Swipe</b>Open hand, sweep it sideways, fast.<u>← next slide · → previous</u></div>
-    <div class="card"><i>🤏</i><b>Grab</b>Touch thumb and index on a piece, move, open to drop.<u>pull a piece out</u></div>
-    <div class="card"><i>🤏</i><b>Tap</b>A quick pinch on a piece, then open.<u>bring it to the front · tap again = back</u></div>
+    <div class="card"><i>✋ ←</i><b>Next slide</b>RIGHT hand open, sweep it to the left.<u>moving it back does nothing</u></div>
+    <div class="card"><i>→ ✋</i><b>Previous slide</b>LEFT hand open, sweep it to the right.<u>moving it back does nothing</u></div>
+    <div class="card"><i>👌</i><b>Grab</b>Thumb and index touching, other three fingers UP. Move, open to drop.<u>pull a piece out</u></div>
+    <div class="card"><i>👌</i><b>Tap</b>A quick 👌 on a piece, then open.<u>bring it to the front · again = back</u></div>
+    <div class="card"><i>👌 ↔ 👌</i><b>Pull apart</b>👌 with both hands, move them apart.<u>layers explode · together = rebuild · twist = turn</u></div>
+    <div class="card"><i>👌 + 👌</i><b>Resize</b>Hold a piece with 👌, 👌 with the other hand and stretch.<u>bigger / smaller</u></div>
     <div class="card"><i>☝️</i><b>Point</b>Index finger out, other fingers folded.<u>laser pointer</u></div>
-    <div class="card"><i>🤏 🤏</i><b>Pull apart</b>Pinch with both hands and pull them apart.<u>explode the layers · together = rebuild</u></div>
-    <div class="card"><i>🤏↻🤏</i><b>Twist</b>Both hands pinched, one goes up, one goes down.<u>turn the slide in 3D</u></div>
-    <div class="card"><i>🤏 + 🤏</i><b>Resize</b>Hold a piece, pinch with the other hand and stretch.<u>bigger / smaller</u></div>
     <div class="card"><i>✌️</i><b>Reset</b>Hold a peace sign for one second.<u>everything back in place</u></div>
   </div>
-  <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close: full = pinched. The label shows what LinkPresent sees.
+  <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close; with the other fingers up, full = 👌. The label shows what LinkPresent sees.
     <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen</div>
 </div>
 <div id="guideChip">✋ GESTURES · ?</div>
@@ -199,7 +199,7 @@
    ?sim=1 scripted demo · ?probe=1 test battery · ?clean=1 meeting view
    ?deck=name.pptx · ?slide=N
    ========================================================================== */
-import { PINCH_IN, PINCH_OUT, PINCH_EARN, PINCH_LET_GO, HOLD_GRACE_MS, SPAN_MIN, AMP, handMetrics, oneEuro,
+import { PINCH_IN, PINCH_OUT, PINCH_EARN, PINCH_LET_GO, HOLD_GRACE_MS, PINCH_FINGERS_UP, SWIPE_BLUR_MS, SPAN_MIN, AMP, handMetrics, oneEuro,
          assignHands as assignSlots, readDetections, loadHandLandmarker, synthHand as synthImage } from '/js/hands.js';
 import { el, rgba, fillCss } from '/js/lp-dom.js';
 import { renderPiece } from '/js/lp-render.js';
@@ -456,6 +456,7 @@ function releaseAll(){ for (const k of Object.keys(PT)){ const o = PT[k]; if (o.
    If one hand is HOLDING a piece, the other hand's stretch resizes just that piece. */
 const TWO = { active: false };
 const EX = { out: false };
+const EXPLODE_SPREAD = .18;   // fraction of the screen width the two pinches travel apart for a full explode
 function twoUpdate(a, b, now = performance.now()){
   if (!a || !b){ if (TWO.active){ TWO.active = false; for (const o of Object.values(PT)) o.noTap = true; } return; }
   const d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x);
@@ -476,9 +477,11 @@ function twoUpdate(a, b, now = performance.now()){
   const r = d / TWO.d0;
   if (TWO.piece) TWO.piece.st.ts = clamp(TWO.s0 * r, .35, 4);
   else {
-    // log scale: doubling the gap and halving it are equal and opposite moves; past the
-    // ends the band re-anchors, so crushing back always fully rebuilds the slide
-    const raw = TWO.e0 + Math.log(r) * .95;
+    // linear in SCREEN WIDTH: EXPLODE_SPREAD of the screen's width is the full pull. Past the ends
+    // the band re-anchors, so coming back in always rebuilds. (Was a log of the gap ratio, needing
+    // ~1.9x the starting gap: 2026-11-01 recording, his hands started wide at the frame edges and
+    // pulled only ~1.2x — one explode, no rebuild. Moves of 10–15% of the frame now do it.)
+    const raw = TWO.e0 + (d - TWO.d0) / (W * EXPLODE_SPREAD);
     if (raw > 1 || raw < 0){ TWO.e0 = raw > 1 ? 1 : 0; TWO.d0 = d; }
     V.eT = clamp(raw, 0, 1);
     // explode / rebuild as EVENTS, with hysteresis so a wobble at the edge is one event
@@ -504,7 +507,7 @@ function px(p){
   const nx = .5 + (p.x - .5) * AMP, ny = .5 + (p.y - .5) * AMP;
   return { x: W - (nx * MAP.sx + MAP.ox), y: ny * MAP.sy + MAP.oy };
 }
-const mkHand = () => ({ present: false, seen: 0, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
+const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
                        oe: null, cur: null, m: null, hover: null, upT: 0, _pp: null, pp: null, movingT: null });
 const HANDS = [mkHand(), mkHand()];
 const assignHands = (lms) => assignSlots(lms, HANDS, px);   // identity-stable slots (camera path only)
@@ -521,9 +524,13 @@ function ingestHands(raw, now = performance.now()){
     const st = HANDS[i]; let lm = raw[i];
     let m = lm ? handMetrics(lm) : null;
     if (m && m.span < SPAN_MIN){ lm = null; m = null; }
-    // a HOLDING hand survives a short tracking gap (HOLD_GRACE_MS): it stays put and keeps the piece
-    if (!lm){ if (st.present && !(st.pinch && now - st.upT < HOLD_GRACE_MS)) dropHand(i); continue; }
-    st.present = true; st.seen++; st.upT = now; st.m = m;
+    // a hand MID-GESTURE (holding, or open and moving) survives a short tracking gap (HOLD_GRACE_MS):
+    // it stays put and keeps its piece / its swipe — fast hands drop out for a frame
+    if (!lm){ if (st.present && !((st.pinch || st.swipe.length > 1) && now - st.upT < HOLD_GRACE_MS)) dropHand(i); continue; }
+    st.present = true; st.seen++; st.upT = now; st.m = m; // which hand: the tracker's label by MAJORITY over this hand's life — it flips for a frame
+    // now and then (2026-11-01: his right hand read 'L' for one frame and that frame fired "back")
+    if (lm.hand === 'L' || lm.hand === 'R'){ st.votes[lm.hand]++; st.hand = st.votes.L > st.votes.R ? 'L' : 'R'; }
+    if (m.openish) st.openT = now;
     if (!guideTimer && !PROBE && !REPLAY) guideTimer = setTimeout(() => document.body.classList.add('nolegend'), 25000);   // the guide steps aside 25 s after it first sees you (? brings it back)
     const cur = st.cur = oneEuro(st, px(m.tip), now);
     const palm = px(m.palm);
@@ -539,16 +546,18 @@ function ingestHands(raw, now = performance.now()){
       if (h !== st.hover){ if (st.hover) st.hover.w.classList.remove('hover'); if (h) h.w.classList.add('hover'); st.hover = h; }
     }
     // PINCH: earned over PINCH_EARN frames, released with hysteresis
-    if (!st.pinch && st.seen >= 3 && m.pinch < PINCH_IN){
+    // a pinch STARTS only as 👌 (other three fingers up): a curled hand touching thumb to index is just a hand at rest
+    const okPinch = m.pinch < PINCH_IN && m.fingersUp > PINCH_FINGERS_UP;
+    if (!st.pinch && st.seen >= 3 && okPinch){
       if (++st.pinchN >= PINCH_EARN){ st.pinch = true; st.swipe.length = 0;
         if (st.hover){ st.hover.w.classList.remove('hover'); st.hover = null; }
         begin('h' + i, cur.x, cur.y, now); }
-    } else if (!st.pinch && m.pinch >= PINCH_IN) st.pinchN = 0;
+    } else if (!st.pinch && !okPinch) st.pinchN = 0;
     else if (st.pinch && m.pinch > PINCH_OUT){   // letting go is earned over PINCH_LET_GO frames; a lone misread frame holds still
       if (++st.openN >= PINCH_LET_GO){ st.pinch = false; st.pinchN = 0; st.openN = 0; end('h' + i, cur.x, cur.y, now); } }
     else if (st.pinch){ st.openN = 0; move('h' + i, cur.x, cur.y); }
     // SWIPE: an open hand travelling fast sideways turns the page
-    if (!st.pinch && m.openish && st.seen >= 3){
+    if (!st.pinch && now - st.openT <= SWIPE_BLUR_MS && st.seen >= 3){   // open, or open a blink ago (motion blur)
       st.swipe.push({ x: palm.x, y: palm.y, t: now });
       while (st.swipe.length && now - st.swipe[0].t > 340) st.swipe.shift();
       const a = st.swipe[0], b = st.swipe[st.swipe.length - 1];
@@ -557,7 +566,11 @@ function ingestHands(raw, now = performance.now()){
         if (Math.abs(dx) > Math.max(150, W * .17) && Math.abs(dy) < Math.abs(dx) * .6 && now - lastNav > 850
             && !HANDS.some(h => h.pinch)){
           const dir = dx < 0 ? 1 : -1;
-          if (dir === -lastNavDir && !returnArmed){ st.swipe.length = 0; }   // the hand coming back
+          // per hand: right hand sweeps left = next, left hand sweeps right = back (SWIPES ARE PER HAND);
+          // no label (synthetic hands) → the side of the screen the stroke started on
+          const side = st.hand || (a.x > W / 2 ? 'R' : 'L');
+          if ((side === 'R') !== (dir === 1)){ /* outward: a wind-up or a return, never a page turn */ }
+          else if (dir === -lastNavDir && !returnArmed){ st.swipe.length = 0; }   // the hand coming back
           else { if (V.focus) unfocus(); else nav(dir, now); st.swipe.length = 0; lastNav = now; }
         }
       }
@@ -587,14 +600,15 @@ function reapStale(){ const now = performance.now(); for (let i = 0; i < 2; i++)
 function poseLabel(st, i){
   const m = st.m, held = PT['h' + i];
   if (st.pinch){
-    if (TWO.active) return TWO.piece ? '🤏 resize' : '🤏 pull apart · twist';
-    if (held && held.piece) return '🤏 holding ' + (held.piece.d.kind === 'chart' ? 'chart' : held.piece.d.kind === 'pic' ? 'picture' : held.piece.d.kind === 'table' ? 'table' : 'piece');
-    return '🤏 turning the slide';
+    if (TWO.active) return TWO.piece ? '👌 resize' : '👌 pull apart · twist';
+    if (held && held.piece) return '👌 holding ' + (held.piece.d.kind === 'chart' ? 'chart' : held.piece.d.kind === 'pic' ? 'picture' : held.piece.d.kind === 'table' ? 'table' : 'piece');
+    return '👌 turning the slide';
   }
   if (!m) return '';
+  if (m.pinch < PINCH_IN && st.hover) return '✊ lift the other 3 fingers to grab';   // curled pinch: on purpose not a grab (PINCH_FINGERS_UP)
   if (st.peaceN > 0) return '✌ hold to reset';
   if (m.point) return '☝ point';
-  if (st.hover) return (m.openish ? '✋' : '·') + ' pinch to grab';
+  if (st.hover) return (m.openish ? '✋' : '·') + ' 👌 to grab';
   if (m.openish) return '✋ open';
   if (m.fist) return '✊ fist';
   return '';
@@ -850,6 +864,49 @@ async function probe(){
     for (const sx of [.74, .6, .42, .28, .22]){ T += 33; onDetections(det(sx), 1280, 720, T); }
     ok('fast-hand-keeps-identity', HANDS[0].present && !HANDS[1].present && HANDS[0].seen === seen0 + 5, `slot0 seen +${HANDS[0].seen - seen0}, slot1 ${HANDS[1].present ? 'took it' : 'empty'}`);
     onDetections({ landmarks: [] }, 1280, 720, T += 33); updateMap(0, 0); if (V.focus) unfocus(); showSlide(cur, 1, true); }
+  // ---- 2026-11-01 real-hands rules (recordings/hands-20261101-1135): each check fails without its rule ----
+  // A CURLED HAND touching thumb to index is a hand at rest, not a grab (PINCH_FINGERS_UP)
+  { const cp = biggestPiece(); const ca = screenOf(cp); const e0 = EVENTS.length;
+    feed(6, () => [handAtTip(ca.x, ca.y, 'open')]); feed(8, () => [handAtTip(ca.x, ca.y, 'fist')]);
+    const fist = handMetrics(synthHand(.5, .5, 'fist'));
+    ok('curled-pinch-ignored', !HANDS[0].pinch && !EVENTS.slice(e0).some(e => e.type === 'grab'),
+       `fist pinch=${fist.pinch.toFixed(2)} fingersUp=${fist.fingersUp.toFixed(2)}`); clear(); resetSlide(true); }
+  // through the CAMERA path, with the tracker's hand labels
+  { const cam = (hs) => { T += 33; onDetections({ landmarks: hs.map(h => synthImage(1 - h.x, h.y || .6, h.pose || 'open').map(p => ({ x: p.x, y: p.y }))),
+                                                  handednesses: hs.map(h => [{ score: .9, categoryName: h.lab }]) }, 1280, 720, T); };
+    const gone = () => { cam([]); T += HOLD_GRACE_MS + 20; cam([]); };
+    const navs = (fn) => { const e0 = EVENTS.length; fn(); gone(); return EVENTS.slice(e0).filter(e => e.type === 'nav').map(e => e.d); };
+    const sweep = (lab, x0, x1, n = 8, at = {}) => { for (let k = 0; k < 4; k++) cam([{ x: x0, lab }]);
+      for (let k = 1; k <= n; k++) cam([{ x: x0 + (x1 - x0) * k / n, lab: at[k] || lab, pose: at['p' + k] || 'open' }]); };
+    T += 2000; lastNav = -9e9; returnArmed = true;
+    // SWIPES ARE PER HAND: the right hand moving right (a wind-up / a return) never turns a page…
+    const out1 = navs(() => sweep('Right', .25, .8));
+    ok('swipe-outward-ignored', out1.length === 0, `navs ${JSON.stringify(out1)}`); T += 1500;
+    // …even when the tracker calls it 'Left' for a frame (label by majority)
+    const out2 = navs(() => sweep('Right', .25, .8, 8, { 8: 'Left' }));
+    ok('swipe-label-flicker-ignored', out2.length === 0, `navs ${JSON.stringify(out2)}`); T += 1500;
+    // the LEFT hand sweeping right is back; the right hand sweeping left is next
+    const back = navs(() => sweep('Left', .2, .75)); T += 1500;
+    const next = navs(() => sweep('Right', .8, .25)); T += 1500;
+    ok('swipe-per-hand', back.join() === '-1' && next.join() === '1', `left→ ${JSON.stringify(back)} · right← ${JSON.stringify(next)}`);
+    // a lone hand jumping a third of the frame in one camera frame (a real fast swipe at 18 fps) stays the same hand
+    const fast = navs(() => { for (let k = 0; k < 5; k++) cam([{ x: .8, lab: 'Right' }]); cam([{ x: .78, lab: 'Right' }]); cam([{ x: .45, lab: 'Right' }]); cam([{ x: .4, lab: 'Right' }]); });
+    ok('fast-swipe-one-hand', fast.join() === '1', `navs ${JSON.stringify(fast)}`); T += 1500;
+    // …but a resting LEFT hand never swallows the RIGHT hand entering the frame (then "swiping" across)
+    const sw = navs(() => { for (let k = 0; k < 12; k++) cam([{ x: .15, lab: 'Left' }]);
+      for (let k = 0; k <= 6; k++) cam([{ x: .45 + .07 * k, lab: 'Right' }]); });
+    ok('other-hand-not-swallowed', sw.length === 0, `navs ${JSON.stringify(sw)}`); T += 1500;
+    // a blurred frame mid-swipe (fingers misread) doesn't cancel the swipe (SWIPE_BLUR_MS)
+    const blur = navs(() => sweep('Right', .64, .36, 8, { p4: 'fist' }));
+    ok('swipe-survives-blur', blur.join() === '1', `navs ${JSON.stringify(blur)}`);
+    updateMap(0, 0); showSlide(cur, 1, true); await wait(300); }
+  // PULL APART from hands that start WIDE: a pull of ~15% of the screen explodes, coming back rebuilds
+  { resetSlide(true); const e0 = EVENTS.length;
+    feed(5, () => [synthHand(.2, .6, 'pinch'), synthHand(.8, .6, 'pinch')]);
+    feed(12, k => [synthHand(lerp(.2, .12, k), .6, 'pinch'), synthHand(lerp(.8, .88, k), .6, 'pinch')]); const peak = V.eT;
+    feed(12, k => [synthHand(lerp(.12, .2, k), .6, 'pinch'), synthHand(lerp(.88, .8, k), .6, 'pinch')]); clear();
+    const ev = EVENTS.slice(e0).map(e => e.type).filter(t => t === 'explode' || t === 'rebuild');
+    ok('small-pull-explodes', ev.join() === 'explode,rebuild', `peak ${peak.toFixed(2)} · ${ev.join(',')}`); resetSlide(true); }
   // 14 keyboard
   const b4 = cur; T += 1000; dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); ok('key-next', cur === b4 + 1);
   // 15 every slide of the deck renders without a frame error
@@ -999,7 +1056,9 @@ async function replay(name){
   if (rec.deck && rec.deck !== DECK_NAME){ await loadDeck(rec.deck); }
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   const frameWait = () => new Promise(r => requestAnimationFrame(r));
+  const only = Q.get('only') ? Q.get('only').split(',') : null;   // ?only=swipe-next,grab replays just those takes
   for (const take of rec.takes){
+    if (only && !only.includes(take.id)) continue;
     prepTake(take);
     await wait(1400);
     statusEl.textContent = `replaying ${take.id}…`;
@@ -1014,8 +1073,9 @@ async function replay(name){
     await wait(500);
     onDetections({ landmarks: [] }, vw, vh, performance.now());        // …and stay gone past HOLD_GRACE_MS
     const got = countEvents(EVENTS.slice(ev0));
-    const v = evaluate(take.expect, got);
-    out.results.push({ id: take.id, title: take.title, pass: v.pass, detail: v.detail, live: take.verdict });
+    const v = evaluate((take.revised && take.revised.expect) || take.expect, got);   // see REVISED TAKES in recorder.js
+    out.results.push({ id: take.id, title: take.title, pass: v.pass, detail: v.detail, live: take.verdict, revised: take.revised ? take.revised.why : null,
+      events: EVENTS.slice(ev0).map(e => Object.assign({}, e, { t: Math.round(e.t - t0) })) });   // what fired, ms into the take
   }
   out.done = true;
   statusEl.textContent = `replay ${out.results.filter(r => r.pass).length}/${out.results.length}`;

@@ -134,19 +134,24 @@ so bars grow in and doughnut slices pop out when the slide comes apart.
 
 | Do this | Get this |
 |---|---|
-| **Swipe** an open hand ← / → | next / previous slide (to go back right after, pause first: the hand's return stroke is ignored) |
-| **Two pinches**, pull apart | the slide comes apart into floating layers |
-| **Two pinches**, together | it rebuilds · **twist** = turn the hologram |
-| **Pinch** a piece (thumb and index touching) | grab it out of the slide and move it; open your fingers to drop it |
-| …and **stretch with the other hand** | resize just that piece |
-| **Tap** (quick pinch) a piece | focus: it flies to the front, everything else dims · tap again = back |
+| **Right hand** open, sweep it **left** | next slide |
+| **Left hand** open, sweep it **right** | previous slide (moving a hand back out never turns a page) |
+| **👌** on a piece: thumb and index touching, **other three fingers up** | grab it out of the slide and move it; open to drop it |
+| …and **👌 with the other hand**, stretch | resize just that piece |
+| **Quick 👌** on a piece, then open | focus: it flies to the front, everything else dims · again = back |
+| **👌 with both hands**, pull apart | the slide comes apart into floating layers |
+| **👌 with both hands**, together | it rebuilds · **twist** = turn the hologram |
 | **Point** (index finger) | red laser pointer for the audience |
-| Pinch empty space and drag | turn the slide in 3D |
+| 👌 on empty space and drag | turn the slide in 3D |
 | **Peace ✌** held | reset the slide |
 
+Why 👌 and not any pinch: a hand resting while you talk is curled, and a curled hand touches thumb to
+index all the time. Lifting the other three fingers is what makes a grab deliberate. Why one direction
+per hand: to swipe back with your right hand you first move it left, and that move looked like "next".
+
 **On screen:** the page opens with a card for each gesture (**?** hides it and brings it back).
-While you present, the ring at your fingertip fills as thumb and index close (full = pinched), and
-a label under it says what LinkPresent sees: *open*, *pinch to grab*, *holding chart*, *point*… —
+While you present, the ring at your fingertip fills as thumb and index close (full, with the other fingers up = 👌), and
+a label under it says what LinkPresent sees: *open*, *👌 to grab*, *holding chart*, *lift the other 3 fingers*, *point*… —
 so you learn the poses fast, and a misread shows the moment it happens. Meeting view hides the labels.
 A grab holds through brief tracking glitches: one misread frame, or the hand lost for a split second.
 
@@ -181,7 +186,7 @@ and column + line combos on two axes), theme colours, hidden slides, speaker not
 SmartArt internals, embedded video, EMF/WMF pictures; table styles are approximated.
 
 Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**23/23**) ·
+`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**31/31**) ·
 `/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat ·
 `/linkpresent?record=1` records your hands · `/linkpresent?replay=<name>` replays a recording.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
@@ -198,6 +203,10 @@ Only the 21 hand points per camera frame are saved — never an image — to
 `recordings/hands-<date>.json.gz` on your computer. Send that file to Claude or commit it: every take
 becomes a test that `tools/check.py` replays through the real camera path, so a gesture that misfired
 for you stays fixed. A take the engine missed is the most useful one to keep.
+
+When a gesture is redesigned, a take done the old way keeps its frames but gets a `revised` goal with
+the reason (usually: the old movement must now fire nothing). `recordings/hands-20261101-1135` is the
+first real session; its revisions explain what changed and why.
 
 `recordings/synthetic-smoke.json.gz` is a simulated session (made by
 `tools/make_synthetic_recording.js`) that keeps the record → replay pipeline tested until real
