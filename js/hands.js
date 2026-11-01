@@ -22,6 +22,22 @@ export const PINCH_IN = .30, PINCH_OUT = .42, PINCH_EARN = 2;
    short to feel), and a HOLDING hand the tracker loses for a moment keeps its grip for
    HOLD_GRACE_MS instead of dropping the piece. Confirm both against a real recording. */
 export const PINCH_LET_GO = 2, HOLD_GRACE_MS = 160;
+/* A pinch is 👌: thumb and index touching WITH THE OTHER THREE FINGERS UP (2026-11-01, first real
+   recording, recordings/hands-20261101-1135). A presenter's hands while talking are curled, and a
+   curled hand puts the index tip on the thumb — 11 false pinches in 12 s of "just present", 10 more
+   while pointing (pointing AT the screen points at the camera, so the index looks short and its tip
+   lands on the thumb). No 2D measure separated those from his curled-fist grabs; finger extension
+   separates 👌 from all of them: mean middle/ring/pinky extension at a false onset ≤ 0.96, at a 👌
+   1.58–1.84. Gate: > PINCH_FINGERS_UP. Only STARTING a pinch needs it; a held pinch may curl. */
+export const PINCH_FINGERS_UP = 1.40;
+/* SWIPES ARE PER HAND (same recording): the RIGHT hand sweeping LEFT is next, the LEFT hand sweeping
+   RIGHT is back; a hand moving outward never turns a page. One hand doing both directions could not
+   work for him: to swipe back he first moved his hand left FAST (the wind-up — it fired "next" and
+   then locked out the real swipe), and his rightward strokes were slow and half-open; after a "next"
+   his hand's trip back fired "back". Outward strokes are exactly the wind-ups and returns.
+   SWIPE_BLUR_MS: a hand that was open this recently still counts as open — mid-swipe the tracker
+   misreads the fingers of a blurred hand for a frame, which used to cancel the swipe. */
+export const SWIPE_BLUR_MS = 200;
 
 /* green-dot forensics: a PERSISTENT false detection (a face, a lamp) survives the
    render gate — hands smaller than 2.5% of frame are background noise. */
@@ -40,6 +56,7 @@ export function handMetrics(lm){
     span,
     tips,
     pinch: dist(lm[4], lm[8]) / span,
+    fingersUp: (tips[1] + tips[2] + tips[3]) / 3,   // middle/ring/pinky extension: 👌 vs a curled hand (PINCH_FINGERS_UP)
     open: tips.every(t => t > 1.45),
     openish: tips.every(t => t > 1.32),   // relaxed real-hand open (parity with the galaxy build)
     fist: tips.every(t => t < 1.05),
@@ -95,7 +112,15 @@ export function assignHands(lms, hands, px){
     cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
       const p = palmPx(lm), d = Math.min(Math.hypot(p.x - last.x, p.y - last.y), Math.hypot(p.x - ahead.x, p.y - ahead.y));
       if (d < bd){ bd = d; bi = k; } });
-    if (bi >= 0 && bd < 260){ out[i] = cand[bi]; claimed[bi] = true; hands[i]._pp = last; }
+    // 260 px keeps two hands apart; ONE tracked hand and ONE detection can't be confused, and a real
+    // swipe at 18 fps jumps ~40% of the frame in one step (2026-11-01 recording: .65→.45 in 66 ms
+    // turned his fastest swipe into a "new hand" that never swiped)
+    // …unless the tracker says it's the OTHER hand (his resting left hand once swallowed his right
+    // hand re-entering the frame, and "swiped" across the screen)
+    const only = cand.find(Boolean), other = only && only.hand && hands[i].hand && only.hand !== hands[i].hand;
+    const lone = order.length === 1 && cand.filter(Boolean).length === 1 && !other;
+    const reach = lone ? Math.max(260, .45 * Math.abs(px({ x: 0, y: .5 }).x - px({ x: 1, y: .5 }).x)) : 260;
+    if (bi >= 0 && bd < reach){ out[i] = cand[bi]; claimed[bi] = true; hands[i]._pp = last; }
   }
   cand.forEach((lm, k) => { if (!lm || claimed[k]) return;
     const slot = out[0] == null && !hands[0].present ? 0
@@ -118,6 +143,9 @@ export function readDetections(res, hands){
   // was throwing away his REAL hand while confident phantoms survived. Detection
   // quality is enforced at the tracker (minHandDetection/Presence/Tracking .6);
   // this stays only as a .5 sanity floor.
+  // which hand it is ('L' / 'R', the tracker's label as it reaches us — his right hand shows on the
+  // screen's right): rides along on the landmark array so gesture rules can be per-hand
+  all.forEach((lm, i) => { const c = hd[i] && hd[i][0] && hd[i][0].categoryName; lm.hand = c ? c[0] : null; });
   let pair = all.map((lm, i) => ({ lm, s: scores[i] ?? 1 })).filter(p => p.s > .5);
   // GHOST-HAND DEDUPE: MediaPipe often reports ONE physical hand as TWO overlapping
   // detections, and the ghost paints a second cursor shadowing the finger (his
