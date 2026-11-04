@@ -162,16 +162,40 @@ def list_recordings():
         out.append({"name": n[:-8], "size": st.st_size, "mtime": st.st_mtime})
     return sorted(out, key=lambda x: x["name"])
 
+def app_version():
+    """Which commit is running (read from .git, no git binary needed) — stamped into recordings so a
+    session can be matched to the engine that recorded it. 'unknown' for a zip download."""
+    try:
+        g = os.path.join(ROOT, ".git")
+        head = open(os.path.join(g, "HEAD")).read().strip()
+        branch, sha = None, head
+        if head.startswith("ref: "):
+            ref = head[5:]; branch = ref.rsplit("/", 1)[-1]
+            rp = os.path.join(g, *ref.split("/"))
+            if os.path.isfile(rp):
+                sha = open(rp).read().strip()
+            else:
+                sha = next((ln.split()[0] for ln in open(os.path.join(g, "packed-refs"))
+                            if ln.strip().endswith(" " + ref)), "")
+        return {"build": sha[:7] or "unknown", "branch": branch}
+    except OSError:
+        return {"build": "unknown", "branch": None}
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quiet
         pass
 
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", fresh=False):
         b = body if isinstance(body, bytes) else json.dumps(body).encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         if ctype.startswith("text/html"):
             self.send_header("Cache-Control", "no-store")   # a stale cached page hid real fixes once
+        elif fresh:
+            # js/ is the gesture engine: always fetch it fresh after an update (2026-11-03: a session
+            # after `git pull` still behaved like the old engine; the page was fresh, its modules maybe not)
+            self.send_header("Cache-Control", "no-cache")
         self.send_header("Content-Length", str(len(b)))
         self.end_headers()
         self.wfile.write(b)
@@ -248,10 +272,12 @@ class H(BaseHTTPRequestHandler):
                     ext = os.path.splitext(full)[1]
                     try:
                         return self._send(200, open(full, "rb").read(),
-                                          self.MIME.get(ext, "application/octet-stream"))
+                                          self.MIME.get(ext, "application/octet-stream"), fresh=p.startswith("/js/"))
                     except OSError:
                         pass
             return self._send(404, {"error": "not found"})
+        if p == "/api/version":
+            return self._send(200, app_version())
         if p == "/api/notes":
             return self._send(200, load_notes())
         if p == "/api/tree":

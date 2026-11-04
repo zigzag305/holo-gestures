@@ -111,6 +111,13 @@ def check_routes(base, deck_names):
                               ("/api/decks", 200, "json")):
         code, body = get(base + path)
         report(f"GET {path}", code == want, f"{code} · {len(body)} bytes")
+    code, body = get(base + "/api/version")
+    report("GET /api/version", code == 200 and "build" in json.loads(body or b"{}"), f"{code} · {body[:60].decode(errors='replace')}")
+    try:   # the gesture engine must never be served from a stale cache after an update
+        cc = urllib.request.urlopen(base + "/js/hands.js", timeout=10).headers.get("Cache-Control", "")
+    except Exception as e:  # noqa: BLE001
+        cc = str(e)
+    report("js/ is served no-cache", "no-cache" in cc, cc or "no Cache-Control header")
     if deck_names:
         code, body = get(base + "/api/deck?name=" + urllib.request.quote(deck_names[0]))
         ok = code == 200 and json.loads(body).get("slides")
