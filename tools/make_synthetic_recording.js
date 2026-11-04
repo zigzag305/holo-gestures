@@ -6,8 +6,8 @@
 //   node tools/make_synthetic_recording.js [http://localhost:4890]
 //
 // Simulated performance: 30 fps with ±5 ms timing jitter and ~0.2% landmark noise, hands leaving
-// the frame between gestures, and a slow hand return after one swipe (must NOT count as a swipe).
-// Pinches are 👌 (synthHand's pinch keeps the other fingers up); back swipes use the left hand.
+// the frame between gestures.
+// Pinches are 👌 (synthHand's pinch keeps the other fingers up); pages turn by pointing at the edge targets.
 const { chromium } = require('playwright');
 const BASE = process.argv[2] || 'http://localhost:4890';
 
@@ -56,26 +56,19 @@ const BASE = process.argv[2] || 'http://localhost:4890';
                                              hand(.7 + .04 * Math.sin(k * 6 + 1), .66 + .03 * Math.sin(k * 5), 'open')]),
       // (no fists: synthHand's fist puts the thumb on the index tip, which a real fist doesn't —
       //  whether real fists trigger grabs is for a real recording to show)
-      'swipe-next': async () => { for (let r = 0; r < 3; r++){
-          await feedFor(400, () => [hand(.78, .58, 'open')]);
-          await feedFor(320, k => [hand(lerp(.78, .22, ease(k)), .58 + .02 * k, 'open')]);
-          if (r === 1) await feedFor(1600, k => [hand(lerp(.22, .78, k), .6, 'open')]);   // slow return: not a swipe
-          else await none(700);
-          await sleep(500); } },
-      // back is the LEFT hand sweeping right (SWIPES ARE PER HAND in js/hands.js)
-      'swipe-back': async () => { for (let r = 0; r < 3; r++){
-          await feedFor(400, () => [hand(.22, .58, 'open')], ['Left']);
-          await feedFor(320, k => [hand(lerp(.22, .78, ease(k)), .58, 'open')], ['Left']);
-          await none(900); } },
-      'pull-apart': async () => { for (let r = 0; r < 2; r++){
-          // hands start ~2 hand-widths apart: closer than ~1.35 the ghost filter (js/hands.js) merges a NEW pair
-          await feedFor(300, () => [hand(.39, .58, 'open'), hand(.61, .58, 'open')]);
-          await feedFor(250, () => [hand(.39, .58, 'pinch'), hand(.61, .58, 'pinch')]);
-          await feedFor(1100, k => [hand(lerp(.39, .14, ease(k)), .58, 'pinch'), hand(lerp(.61, .86, ease(k)), .58, 'pinch')]);
-          await feedFor(400, () => [hand(.14, .58, 'pinch'), hand(.86, .58, 'pinch')]);
-          await feedFor(1100, k => [hand(lerp(.14, .4, ease(k)), .58, 'pinch'), hand(lerp(.86, .6, ease(k)), .58, 'pinch')]);
-          await feedFor(250, () => [hand(.4, .58, 'open'), hand(.6, .58, 'open')]);
-          await none(600); } },
+      // POINT & HOLD on the edge targets (linkpresent.html EDGE_X / EDGE_TOP / APART_X): next, back, pull apart
+      'point-next': async () => { for (let r = 0; r < 3; r++){
+          await feedFor(500, () => [handAtTip(W * .5, Hh * .5, 'point')]);
+          await feedFor(900, () => [handAtTip(W * .955, Hh * .5, 'point')]);
+          await feedFor(500, () => [handAtTip(W * .55, Hh * .5, 'point')]); await none(400); } },
+      'point-back': async () => { for (let r = 0; r < 3; r++){
+          await feedFor(500, () => [handAtTip(W * .5, Hh * .5, 'point')]);
+          await feedFor(900, () => [handAtTip(W * .045, Hh * .5, 'point')]);
+          await feedFor(500, () => [handAtTip(W * .45, Hh * .5, 'point')]); await none(400); } },
+      'point-apart': async () => { for (let r = 0; r < 4; r++){   // apart, rebuild, apart, rebuild
+          await feedFor(500, () => [handAtTip(W * .5, Hh * .5, 'point')]);
+          await feedFor(900, () => [handAtTip(W * .77, Hh * .045, 'point')]);
+          await feedFor(400, () => [handAtTip(W * .6, Hh * .4, 'point')]); } await none(400); },
       grab: async () => { for (let r = 0; r < 3; r++){
           const c = centerOf(p => p.d.kind === 'chart');
           await feedFor(400, () => [handAtTip(c.x, c.y, 'open')]);
@@ -102,7 +95,7 @@ const BASE = process.argv[2] || 'http://localhost:4890';
     R.recNext();
     const out = [];
     for (let i = 0; i < 8; i++){
-      await until('ready'); const id = ['rest', 'swipe-next', 'swipe-back', 'pull-apart', 'grab', 'tap', 'point', 'peace'][i];
+      await until('ready'); const id = ['rest', 'point-next', 'point-back', 'point-apart', 'grab', 'tap', 'point', 'peace'][i];
       R.recStart(); await until('rec');
       await scripts[id]();
       R.recStop(); await until('review');
