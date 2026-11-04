@@ -3,16 +3,16 @@
 Open work, in order. Update this file as things land; `CLAUDE.md` holds only what stays true.
 
 ## Next
-1. **Real hands as tests.** First real recording in: `recordings/hands-20261101-1135` (Intel Mac, ~18 fps).
-   Live it went 1/8; the engine now replays it 8/8. What it changed (all in `js/hands.js` + LinkPresent):
-   a pinch must be 👌 (curled hands at rest and pointing at the screen read as pinches); swipes are per
-   hand (wind-ups and returns fired the wrong way); hand labels by majority; a lone fast hand keeps its
-   identity, but never swallows the other hand; a blurred frame doesn't cancel a swipe; pull-apart
-   is measured in screen width (wide-start hands couldn't explode/rebuild).
-   *Needs: re-record grab, tap and swipe-back the new way* (👌; left hand for back): those takes were
-   done with the old gestures and are kept as guards (see their `revised` notes).
-   Open questions: the laser fires while talking (pointing at rest, 7× in 12 s); a grab while the
-   slide is exploded; HOLO (`holo.html`) still uses the old pinch and drops grabs on one bad frame.
+1. **Real hands as tests.** Two real sessions in `recordings/`, both replay 8/8 and 4/4.
+   - `hands-20261101-1135` (~18 fps) → 👌 to grab; per-hand swipes; label by majority; screen-width pull-apart.
+   - `hands-20261103-2325` (8–11 fps, evening light): the tracker lost the hand for the fast part of every
+     swipe, and the right hand never made 👌 for the two-hand pull. He asked for one-hand presenting and
+     a self-view tile. → **point & hold on edge targets** (next / back / pull apart), swipes off by default
+     (W), self-view tile layout, recordings now stamp build + fps + tracking ms + settings per take.
+   *Needs: a session with the new takes* (point-next, point-back, point-apart, grab, tap) **in good light**,
+   then compare its `perf.fps` with these two.
+   Open: is 8–11 fps the camera (light) or the tracker (Intel GPU)? `perf.trackMs` will tell. The laser
+   fires while talking (pointing at rest). HOLO (`holo.html`) still uses the old pinch.
 2. **PowerPoint as the reference.** Done: five sample decks exported from PowerPoint into `decks/pdf/`;
    `tools/fidelity.py` scores against those and falls back to LibreOffice for decks without one
    (still `velora-q3-2026-qbr`). First PowerPoint comparison (2026-11-01): 35/35 slides ≥ 80%.

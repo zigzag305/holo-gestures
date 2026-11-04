@@ -61,8 +61,8 @@ check the worst slides; the score is a guide (LibreOffice-referenced decks have 
 - **New probe check:** drive the real engine with `synthHand` frames, never by calling the
   handler directly. Make sure the check would fail on a wrong value, not only on a missing feature.
 - URL switches: `?sim=1` scripted demo · `?probe=1` test battery · `?clean=1` meeting view ·
-  `?render=1` bare flat slide (fidelity) · `?record=1` record hands · `?replay=name` replay a recording ·
-  `?deck=name.pptx&slide=N`.
+  `?render=1` bare flat slide (fidelity) · `?record=1` record hands · `?replay=name` replay a recording
+  (`&only=take1,take2`) · `?deck=name.pptx&slide=N`. Replays run each take with the `settings` it was recorded with.
 - **Every tracker result enters through `onDetections()`** in `linkpresent.html` (camera, replay, test
   hooks). Engine reactions are `emit()`ted as events; recordings and replays are judged on those.
 - **Recordings decide tuning.** A real recording that fails is a bug report with a repro: fix the

@@ -7,6 +7,13 @@
   body { background:radial-gradient(ellipse at 50% 40%, #13202a 0%, #070b0f 70%); }
   #cam { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;
          transform:scaleX(-1); opacity:1; transition:opacity .4s; }
+  /* SELF-VIEW (default layout): you in a tile at the bottom right, like any meeting app; the slide large.
+     Hands still steer across the WHOLE screen — the tile is only what you see of yourself. */
+  body.pip #cam { inset:auto; right:16px; bottom:16px; width:min(21vw, 300px); height:auto; aspect-ratio:16/9;
+         border-radius:14px; border:1px solid rgba(125,255,217,.35); box-shadow:0 14px 40px rgba(0,0,0,.5); z-index:5; }
+  body.pip #vignette { display:none; }
+  body.pip:not(.camlive) #cam { visibility:hidden; }
+  body.pip #counter { right:calc(min(21vw, 300px) + 32px); }
   #vignette { position:fixed; inset:0; z-index:2; pointer-events:none;
          background:radial-gradient(ellipse at center, transparent 55%, rgba(4,6,9,.45) 100%); }
   #stage { position:fixed; inset:0; z-index:3; perspective:1700px; overflow:hidden; }
@@ -167,19 +174,19 @@
 <div id="notes"><b>SPEAKER NOTES</b><span></span></div>
 <div id="counter"></div>
 <div id="legend">
-  <div class="gh">Gestures <span>a curled or resting hand does nothing · press ? to hide / show</span></div>
+  <div class="gh">Gestures <span>one hand is enough · a curled or resting hand does nothing · press ? to hide / show</span></div>
   <div class="cards">
-    <div class="card"><i>✋ ←</i><b>Next slide</b>RIGHT hand open, sweep it to the left.<u>moving it back does nothing</u></div>
-    <div class="card"><i>→ ✋</i><b>Previous slide</b>LEFT hand open, sweep it to the right.<u>moving it back does nothing</u></div>
+    <div class="card"><i>☝️ ›</i><b>Next slide</b>Point at the › on the RIGHT edge and hold it there.<u>the ring fills · one slide per visit</u></div>
+    <div class="card"><i>‹ ☝️</i><b>Previous slide</b>Point at the ‹ on the LEFT edge and hold it there.<u>the ring fills · one slide per visit</u></div>
+    <div class="card"><i>☝️ ✦</i><b>Pull apart</b>Point at the ✦ at the top right and hold.<u>layers explode · again = rebuild</u></div>
+    <div class="card"><i>☝️</i><b>Laser</b>Index finger out, other fingers folded.<u>a red dot where you point</u></div>
     <div class="card"><i>👌</i><b>Grab</b>Thumb and index touching, other three fingers UP. Move, open to drop.<u>pull a piece out</u></div>
     <div class="card"><i>👌</i><b>Tap</b>A quick 👌 on a piece, then open.<u>bring it to the front · again = back</u></div>
-    <div class="card"><i>👌 ↔ 👌</i><b>Pull apart</b>👌 with both hands, move them apart.<u>layers explode · together = rebuild · twist = turn</u></div>
-    <div class="card"><i>👌 + 👌</i><b>Resize</b>Hold a piece with 👌, 👌 with the other hand and stretch.<u>bigger / smaller</u></div>
-    <div class="card"><i>☝️</i><b>Point</b>Index finger out, other fingers folded.<u>laser pointer</u></div>
+    <div class="card"><i>👌 + 👌</i><b>Two hands (optional)</b>Hold a piece and 👌 with the other hand to resize; 👌👌 apart to explode.<u>bigger / smaller · twist = turn</u></div>
     <div class="card"><i>✌️</i><b>Reset</b>Hold a peace sign for one second.<u>everything back in place</u></div>
   </div>
   <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close; with the other fingers up, full = 👌. The label shows what LinkPresent sees.
-    <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · F fullscreen</div>
+    <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · W swipes on/off · F fullscreen</div>
 </div>
 <div id="guideChip">✋ GESTURES · ?</div>
 <div id="toast"></div>
@@ -222,12 +229,18 @@ function toast(msg, ms = 1100){ const t = $('toast'); t.textContent = msg; t.cla
 
 /* ---------- look & feel knobs (keys C / G / L) ---------- */
 const CAM_LEVELS = [1, .6, .3, 0], GLASS_LEVELS = [.9, .78, .62, 1];
-const LAYOUTS = [ { name:'CENTER', frac:.74, cx:.5 }, { name:'SLIDE LEFT · YOU RIGHT', frac:.6, cx:.36 },
+const LAYOUTS = [ { name:'SELF-VIEW · BOTTOM RIGHT', frac:.78, cx:.43, cy:.47, pip:true },
+                  { name:'HOLOGRAM · SLIDE OVER YOU', frac:.74, cx:.5 }, { name:'SLIDE LEFT · YOU RIGHT', frac:.6, cx:.36 },
                   { name:'SLIDE RIGHT · YOU LEFT', frac:.6, cx:.64 }, { name:'FULL', frac:.94, cx:.5 } ];
-const VIEW = { cam: 0, glass: 0, layout: 0 };
-try { Object.assign(VIEW, JSON.parse(localStorage.getItem('linkpresent-view') || '{}')); } catch (_){}
-function saveView(){ try { localStorage.setItem('linkpresent-view', JSON.stringify(VIEW)); } catch (_){} }
+// swipes: OFF by default (2026-11-03 recording hands-20261103-2325: at 8–11 fps in dim light the tracker
+// lost his hand for the whole fast part of every swipe and saw only the slow trip back — which read as
+// a swipe the other way). Point & hold on the edges turns pages instead; W brings swipes back.
+const VIEW = { cam: 0, glass: 0, layout: 0, swipes: false };
+// -v2: the self-view layout became layout 0; old saved views (and a camera dimmed with C) start over
+try { Object.assign(VIEW, JSON.parse(localStorage.getItem('linkpresent-view-v2') || '{}')); } catch (_){}
+function saveView(){ try { localStorage.setItem('linkpresent-view-v2', JSON.stringify(VIEW)); } catch (_){} }
 function applyView(){ cam.style.opacity = CAM_LEVELS[VIEW.cam % CAM_LEVELS.length];
+  document.body.classList.toggle('pip', !!LAYOUTS[VIEW.layout % LAYOUTS.length].pip && !RENDER);
   for (const s of Object.values(SLIDES)) if (s && s.plate) s.plate.style.opacity = GLASS_LEVELS[VIEW.glass % GLASS_LEVELS.length];
   layout(); }
 
@@ -245,7 +258,7 @@ function layout(){
   if (!DECK) return;
   const L = LAYOUTS[VIEW.layout % LAYOUTS.length];
   FIT = Math.min(W * L.frac / DECK.w, H * .8 / DECK.h);
-  CX = W * L.cx; CY = H * .53;
+  CX = W * L.cx; CY = H * (L.cy || .53);
   if (RENDER){ FIT = Math.min(W / DECK.w, H / DECK.h); CX = W / 2; CY = H / 2; }
   stage.style.perspectiveOrigin = `${CX}px ${CY}px`;
 }
@@ -361,9 +374,13 @@ function unfocus(){
 function explodeOffset(p){ return { x: p.cx * .09 * V.eT, y: p.cy * .09 * V.eT + (p.rank > 1 ? 30 * V.eT : 0) }; }
 
 /* ---------- per-frame: place every layer ---------- */
+// exploded layers come forward (up to ~460px in z) and perspective enlarges them ~1.35x; the slide
+// shrinks by EXPLODE_SHRINK as it comes apart so the edge pieces stay on screen (the self-view layout's
+// bigger slide pushed the title off the top-left)
+const EXPLODE_SHRINK = .2;
 function slideTransform(extraX = 0, rotY = 0){
   const yaw = V.yaw - 15 * V.e + rotY, pitch = V.pitch + 7 * V.e;
-  return `translate3d(${CX + extraX}px, ${CY}px, 0) scale(${FIT}) rotateX(${pitch.toFixed(2)}deg) rotateY(${yaw.toFixed(2)}deg) translate(${-DECK.w / 2}px, ${-DECK.h / 2}px)`;
+  return `translate3d(${CX + extraX}px, ${CY}px, 0) scale(${(FIT * (1 - EXPLODE_SHRINK * V.e)).toFixed(4)}) rotateX(${pitch.toFixed(2)}deg) rotateY(${yaw.toFixed(2)}deg) translate(${-DECK.w / 2}px, ${-DECK.h / 2}px)`;
 }
 function frame(now){
   if (!DECK || !SLIDES[cur]) return;
@@ -507,7 +524,7 @@ function px(p){
   const nx = .5 + (p.x - .5) * AMP, ny = .5 + (p.y - .5) * AMP;
   return { x: W - (nx * MAP.sx + MAP.ox), y: ny * MAP.sy + MAP.oy };
 }
-const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
+const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pointT: null, dwell: null, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
                        oe: null, cur: null, m: null, hover: null, upT: 0, _pp: null, pp: null, movingT: null });
 const HANDS = [mkHand(), mkHand()];
 const assignHands = (lms) => assignSlots(lms, HANDS, px);   // identity-stable slots (camera path only)
@@ -557,7 +574,7 @@ function ingestHands(raw, now = performance.now()){
       if (++st.openN >= PINCH_LET_GO){ st.pinch = false; st.pinchN = 0; st.openN = 0; end('h' + i, cur.x, cur.y, now); } }
     else if (st.pinch){ st.openN = 0; move('h' + i, cur.x, cur.y); }
     // SWIPE: an open hand travelling fast sideways turns the page
-    if (!st.pinch && now - st.openT <= SWIPE_BLUR_MS && st.seen >= 3){   // open, or open a blink ago (motion blur)
+    if (VIEW.swipes && !st.pinch && now - st.openT <= SWIPE_BLUR_MS && st.seen >= 3){   // open, or open a blink ago (motion blur)
       st.swipe.push({ x: palm.x, y: palm.y, t: now });
       while (st.swipe.length && now - st.swipe[0].t > 340) st.swipe.shift();
       const a = st.swipe[0], b = st.swipe[st.swipe.length - 1];
@@ -579,12 +596,47 @@ function ingestHands(raw, now = performance.now()){
     if (m.peace && !st.pinch){ if (++st.peaceN === 8 && now - lastPeace > 1500){ lastPeace = now; resetSlide(); } }
     else st.peaceN = 0;
     // POINT = laser pointer for the audience
-    if (m.point && !st.pinch){ st.pointN++; if (st.pointN === 4) emit('laser'); if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
+    if (m.point && !st.pinch){ st.pointN++; st.pointT = now; if (st.pointN === 4) emit('laser'); if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
     else st.pointN = 0;
     while (st.laser.length && now - st.laser[0].t > 450) st.laser.shift();
+    // POINT & HOLD on an edge: right → next, left → back, top → pull the slide apart / rebuild.
+    // One hand, slow, and a held pose survives 8 fps (see VIEW.swipes). One action per visit.
+    edgeDwell(st, cur, now);
   }
   const pa = HANDS[0].pinch && HANDS[0].cur, pb = HANDS[1].pinch && HANDS[1].cur;
   twoUpdate(pa || null, pb || null, now);
+}
+/* POINT & HOLD (2026-11-03: "two hands in front of the camera is hard — you show one hand because you're
+   talking and pointing"). EDGE_X / EDGE_TOP: the edge bands, as fractions of the screen; NAV_HOLD_MS: how
+   long the laser rests there; POINT_GRACE_MS: a pointing hand misread for a frame or two keeps its hold. */
+const EDGE_X = .08, EDGE_TOP = .09, NAV_HOLD_MS = 600, POINT_GRACE_MS = 350;
+/* The fingertip must be ON the target, on screen: next/back in the middle 60% of the height, the top one
+   within 9% of APART_X. (Replays of both real sessions: all 5 accidental holds had the fingertip
+   OFF the screen — a finger raised while talking maps above the top edge — or far from the target.)
+   APART_X: the top target sits right of centre, in the free strip between the toolbar and the status line. */
+const APART_X = .77;
+function edgeZone(c, was){
+  const m = (z) => was === z ? .03 : 0;            // hysteresis: a jittery fingertip doesn't drop out of its target
+  const onX = c.x >= 0 && c.x <= W, onY = c.y >= 0 && c.y <= H;
+  if (!onX || !onY) return null;
+  const midY = (z) => c.y > H * (.2 - m(z)) && c.y < H * (.8 + m(z));
+  if (c.x > W * (1 - EDGE_X - m('next')) && midY('next')) return 'next';
+  if (c.x < W * (EDGE_X + m('back')) && midY('back')) return 'back';
+  if (c.y < H * (EDGE_TOP + m('apart')) && c.x > W * (APART_X - .09 - m('apart')) && c.x < W * (APART_X + .09 + m('apart'))) return 'apart';
+  return null;
+}
+function edgeDwell(st, cur, now){
+  const pointing = !st.pinch && st.pointT != null && now - st.pointT <= POINT_GRACE_MS && st.seen >= 3;
+  const z = pointing ? edgeZone(cur, st.dwell && st.dwell.zone) : null;
+  if (!z){ st.dwell = null; return; }
+  if (!st.dwell || st.dwell.zone !== z){ st.dwell = { zone: z, t0: now, done: false }; return; }
+  if (st.dwell.done || now - st.dwell.t0 < NAV_HOLD_MS) return;
+  st.dwell.done = true;                            // leave the band to do it again
+  if (z === 'apart'){
+    if (V.focus) unfocus();
+    if (EX.out || V.eT > .5){ V.eT = 0; EX.out = false; emit('rebuild'); toast('REBUILT'); }
+    else { V.eT = 1; EX.out = true; emit('explode'); toast('PULLED APART'); }
+  } else { if (V.focus) unfocus(); nav(z === 'next' ? 1 : -1, now); }
 }
 /* every tracker result enters here: the live camera, and replayed recordings */
 function onDetections(res, vw, vh, now = performance.now()){
@@ -613,12 +665,36 @@ function poseLabel(st, i){
   if (m.fist) return '✊ fist';
   return '';
 }
+/* the edge targets appear while a hand points; the one being held fills like a timer */
+function drawEdges(now){
+  const pointing = HANDS.filter(st => st.present && st.pointT != null && now - st.pointT <= POINT_GRACE_MS);
+  if (!pointing.length) return;
+  const clean = document.body.classList.contains('clean');
+  const spots = { next: [W * (1 - EDGE_X / 2), H * .5, '›', 'NEXT'], back: [W * EDGE_X / 2, H * .5, '‹', 'BACK'],
+                  apart: [W * APART_X, H * EDGE_TOP / 2 + 6, EX.out || V.eT > .5 ? '◉' : '✦', EX.out || V.eT > .5 ? 'REBUILD' : 'PULL APART'] };
+  for (const [z, [x, y, glyph, word]] of Object.entries(spots)){
+    const d = pointing.map(st => st.dwell).find(dw => dw && dw.zone === z);
+    if (clean && !d) continue;                       // meeting view: only the target being held
+    const f = d ? (d.done ? 1 : clamp((now - d.t0) / NAV_HOLD_MS, 0, 1)) : 0;
+    HX.globalAlpha = d ? .95 : .38;
+    HX.fillStyle = 'rgba(8,14,18,.7)'; HX.beginPath(); HX.arc(x, y, 26, 0, 7); HX.fill();
+    HX.strokeStyle = 'rgba(255,90,90,.9)'; HX.lineWidth = 3;
+    HX.beginPath(); HX.arc(x, y, 26, 0, 7); HX.stroke();
+    if (f > 0){ HX.strokeStyle = '#ff3b3b'; HX.lineWidth = 6;
+      HX.beginPath(); HX.arc(x, y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); HX.stroke(); }
+    HX.fillStyle = '#ffe1e1'; HX.font = '600 22px -apple-system, "Segoe UI", sans-serif'; HX.textAlign = 'center'; HX.textBaseline = 'middle';
+    HX.fillText(glyph, x, y + 1);
+    HX.font = '600 10px ui-monospace, Menlo, monospace'; HX.textBaseline = 'top';
+    HX.fillText(word, x, z === 'apart' ? y + 32 : y + 32);
+    HX.globalAlpha = 1;
+  }
+}
 function handLabel(c, text){
   if (!text || document.body.classList.contains('clean')) return;
   HX.font = '600 13px -apple-system, "Segoe UI", sans-serif'; HX.textAlign = 'center'; HX.textBaseline = 'top';
-  const w = HX.measureText(text).width + 16, x = c.x - w / 2, y = c.y + 30;
+  const w = HX.measureText(text).width + 16, x = clamp(c.x - w / 2, 8, W - w - 8), y = clamp(c.y + 30, 8, H - 30);
   HX.fillStyle = 'rgba(8,14,18,.78)'; HX.beginPath(); HX.roundRect(x, y, w, 22, 11); HX.fill();
-  HX.fillStyle = '#dffff4'; HX.fillText(text, c.x, y + 4);
+  HX.fillStyle = '#dffff4'; HX.fillText(text, x + w / 2, y + 4);
 }
 function drawHud(now){
   HX.clearRect(0, 0, W, H);
@@ -633,7 +709,7 @@ function drawHud(now){
       }
       HX.fillStyle = '#ff3b3b'; HX.shadowColor = '#ff3b3b'; HX.shadowBlur = 24;
       HX.beginPath(); HX.arc(st.cur.x, st.cur.y, 9, 0, 7); HX.fill(); HX.shadowBlur = 0;
-      handLabel(st.cur, '☝ laser');
+      handLabel(st.cur, st.dwell ? '☝ hold · ' + { next: 'next slide', back: 'previous slide', apart: EX.out || V.eT > .5 ? 'rebuild' : 'pull apart' }[st.dwell.zone] : '☝ laser');
       continue;
     }
     const c = st.cur;
@@ -655,6 +731,7 @@ function drawHud(now){
       HX.beginPath(); HX.arc(c.x, c.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * st.peaceN / 8); HX.stroke();
     }
   }
+  drawEdges(now);
   if (TWO.active){
     HX.setLineDash([6, 8]); HX.strokeStyle = 'rgba(125,255,217,.75)'; HX.lineWidth = 2;
     HX.beginPath(); HX.moveTo(TWO.ax, TWO.ay); HX.lineTo(TWO.bx, TWO.by); HX.stroke(); HX.setLineDash([]);
@@ -668,12 +745,14 @@ function drawHud(now){
    CAMERA + MEDIAPIPE (self-hosted first, CDN fallback — same as holo.html)
    ========================================================================== */
 let landmarker = null, camOn = false, camStarting = false, lastVideoT = -1, stream = null;
+const TRACK = { delegate: null, ms: 0 };          // GPU / CPU, and the last detection's time in ms
+let BUILD = null; fetch('/api/version').then(r => r.json()).then(j => { BUILD = j; }).catch(() => {});
 async function startCamera(){
   if (SIM || PROBE || camOn || camStarting) return;
   camStarting = true; statusEl.textContent = 'loading hand tracking…';
   try {
     if (!landmarker){
-      landmarker = (await loadHandLandmarker()).landmarker;
+      const lh = await loadHandLandmarker(); landmarker = lh.landmarker; TRACK.delegate = lh.delegate || null;
     }
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
   } catch (e){
@@ -684,7 +763,7 @@ async function startCamera(){
       : 'hand tracking unavailable · keys + mouse still work';
     $('camBtn').classList.add('off'); return;
   }
-  cam.srcObject = stream; camOn = true; camStarting = false;
+  cam.srcObject = stream; camOn = true; camStarting = false; document.body.classList.add('camlive');
   $('camBtn').classList.remove('off'); $('camBtn').textContent = 'HANDS ON';
   statusEl.textContent = 'hands live · on-device';
   const tick = () => {
@@ -692,14 +771,15 @@ async function startCamera(){
     if (cam.currentTime !== lastVideoT && cam.videoWidth){
       lastVideoT = cam.currentTime;
       const now = performance.now();
-      onDetections(landmarker.detectForVideo(cam, now), cam.videoWidth, cam.videoHeight, now);
+      const res = landmarker.detectForVideo(cam, now); TRACK.ms = performance.now() - now;   // how long tracking took (recordings keep it)
+      onDetections(res, cam.videoWidth, cam.videoHeight, now);
     }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
 function stopCamera(){
-  camOn = false; if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; cam.srcObject = null;
+  camOn = false; document.body.classList.remove('camlive'); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; cam.srcObject = null;
   for (let i = 0; i < 2; i++) dropHand(i);
   $('camBtn').classList.add('off'); $('camBtn').textContent = 'HANDS OFF'; statusEl.textContent = 'hands off · keys + mouse';
 }
@@ -727,12 +807,11 @@ function demoSteps(){
   const C = {};
   const hold = (ms, f) => ({ d: ms, f });
   const none = (ms) => hold(ms, () => []);
-  const swipe = [hold(450, () => [synthHand(.74, .62, 'open')]),
-                 hold(300, k => [synthHand(lerp(.74, .26, ease(k)), .62, 'open')]), none(900)];
-  const stretch = [hold(250, () => [synthHand(.44, .6, 'open'), synthHand(.56, .6, 'open')]),
-                   hold(250, () => [synthHand(.44, .6, 'pinch'), synthHand(.56, .6, 'pinch')]),
-                   hold(1300, k => [synthHand(lerp(.44, .2, ease(k)), lerp(.6, .66, k), 'pinch'), synthHand(lerp(.56, .8, ease(k)), lerp(.6, .54, k), 'pinch')]),
-                   hold(250, () => [synthHand(.2, .66, 'open'), synthHand(.8, .54, 'open')]), none(1500)];
+  // one hand: point at the › and hold (next slide), then at the ✦ (pull apart) — the peace sign at the end rebuilds
+  const next = [hold(450, () => [handAtTip(W * .6, H * .5, 'point')]), hold(900, () => [handAtTip(W * .955, H * .5, 'point')]),
+                hold(300, () => [handAtTip(W * .62, H * .5, 'point')]), none(800)];
+  const apart = [hold(400, () => [handAtTip(W * .62, H * .3, 'point')]), hold(900, () => [handAtTip(W * APART_X, H * .045, 'point')]),
+                 hold(300, () => [handAtTip(W * .62, H * .3, 'point')]), none(1500)];
   const grab = [{ d: 10, f: () => [], s: () => { const p = biggestPiece(q => q.d.kind === 'chart' || q.d.kind === 'table'); C.g = p ? screenOf(p) : { x: W / 2, y: H / 2 }; } },
                 hold(350, () => [handAtTip(C.g.x, C.g.y, 'open')]),
                 hold(200, () => [handAtTip(C.g.x, C.g.y, 'pinch')]),
@@ -744,7 +823,7 @@ function demoSteps(){
                  hold(150, () => [synthHand(.85, .8, 'pinch')]), hold(200, () => [synthHand(.85, .8, 'open')]), none(700)];
   const laser = [hold(1400, k => [synthHand(.35 + .3 * Math.sin(k * 3), .45 + .08 * Math.cos(k * 5), 'point')]), none(300)];
   const peace = [hold(700, () => [synthHand(.7, .55, 'peace')]), none(1100)];
-  return [none(1200), ...swipe, ...stretch, ...grab, ...focus, ...laser, ...peace];
+  return [none(1200), ...next, ...apart, ...grab, ...focus, ...laser, ...peace];
 }
 let SIMQ = null;
 function simTick(now){
@@ -769,6 +848,7 @@ async function probe(){
   const feed = (n, fn) => { for (let k = 0; k < n; k++){ T += 16; const h = fn(k / Math.max(1, n - 1)) || []; ingestHands([h[0] || null, h[1] || null], T); } };
   const clear = () => { feed(3, () => []); T += HOLD_GRACE_MS; feed(1, () => []); };   // gone for good, past the hold grace
   showSlide(Math.min(3, DECK.slides.length - 1), 1, true); await wait(1700);
+  const swipes0 = VIEW.swipes; VIEW.swipes = true;   // the swipe checks below run with swipes ON (W); off is checked at the end
   const start = cur;
   // 1-2 swipes
   feed(6, () => [synthHand(.75, .6, 'open')]); feed(14, k => [synthHand(lerp(.75, .25, k), .6, 'open')]); clear();
@@ -907,6 +987,40 @@ async function probe(){
     feed(12, k => [synthHand(lerp(.12, .2, k), .6, 'pinch'), synthHand(lerp(.88, .8, k), .6, 'pinch')]); clear();
     const ev = EVENTS.slice(e0).map(e => e.type).filter(t => t === 'explode' || t === 'rebuild');
     ok('small-pull-explodes', ev.join() === 'explode,rebuild', `peak ${peak.toFixed(2)} · ${ev.join(',')}`); resetSlide(true); }
+  // ---- 2026-11-03: one hand. Swipes OFF by default; POINT & HOLD on the edges turns pages ----
+  VIEW.swipes = swipes0;   // the page's own default (a fresh browser: nothing saved)
+  { await wait(300); const b0 = cur; T += 1500; lastNav = -9e9; returnArmed = true;
+    feed(6, () => [synthHand(.75, .6, 'open')]); feed(14, k => [synthHand(lerp(.75, .25, k), .6, 'open')]); clear();
+    ok('swipes-off-by-default', swipes0 === false && cur === b0, `default swipes=${swipes0} · ${b0}→${cur}`); }
+  { const navs = (fn) => { const e0 = EVENTS.length; fn(); clear(); return EVENTS.slice(e0).filter(e => e.type === 'nav').map(e => e.d); };
+    const hold = (x, y, pose, ms) => feed(Math.round(ms / 16), () => [handAtTip(x, y, pose)]);
+    showSlide(Math.min(4, DECK.slides.length - 2), 1, true); await wait(900); T += 1500;
+    // pointing at the right edge and holding turns ONE page, however long you hold
+    const r = navs(() => { hold(W * .5, H * .5, 'point', 200); hold(W * .97, H * .5, 'point', 2000); });
+    // pointing at the left edge is back; a short visit (less than NAV_HOLD_MS) does nothing
+    T += 1500; const quick = navs(() => { hold(W * .5, H * .5, 'point', 200); hold(W * .03, H * .5, 'point', NAV_HOLD_MS - 200); });
+    T += 1500; const l = navs(() => { hold(W * .5, H * .5, 'point', 200); hold(W * .03, H * .5, 'point', NAV_HOLD_MS + 200); });
+    ok('point-hold-edges', r.join() === '1' && l.join() === '-1' && quick.length === 0, `right ${JSON.stringify(r)} · left ${JSON.stringify(l)} · quick ${JSON.stringify(quick)}`);
+    // an OPEN or resting hand at the edge does nothing: only the laser holds
+    T += 1500; const open = navs(() => { hold(W * .97, H * .5, 'open', 1500); hold(W * .97, H * .5, 'fist', 1000); });
+    ok('edge-needs-point', open.length === 0, `navs ${JSON.stringify(open)}`);
+    // a finger raised high while talking points OFF the screen (above the top, past the side): no target
+    T += 1500; const e9 = EVENTS.length;
+    hold(W * .5, -H * .12, 'point', 1200); hold(W * 1.08, H * .5, 'point', 1200); clear();
+    const offs = EVENTS.slice(e9).filter(e => e.type === 'nav' || e.type === 'explode').map(e => e.type);
+    ok('edge-off-screen-ignored', offs.length === 0, `fired ${JSON.stringify(offs)}`);
+    // a frame or two misread mid-hold (POINT_GRACE_MS) keeps the hold going
+    T += 1500; const flick = navs(() => { hold(W * .5, H * .5, 'point', 200); hold(W * .97, H * .5, 'point', 300);
+      hold(W * .97, H * .5, 'open', 100); hold(W * .97, H * .5, 'point', 400); });
+    ok('point-hold-survives-misread', flick.join() === '1', `navs ${JSON.stringify(flick)}`);
+    // the top edge pulls the slide apart; pointing there again rebuilds it — one hand
+    T += 1500; const e0 = EVENTS.length;
+    hold(W * .5, H * .5, 'point', 200); hold(W * APART_X, H * .03, 'point', 900); const out = V.eT;
+    hold(W * .5, H * .5, 'point', 300); hold(W * APART_X, H * .03, 'point', 900); clear();
+    const ev = EVENTS.slice(e0).map(e => e.type).filter(t => t === 'explode' || t === 'rebuild');
+    ok('point-hold-top-apart', ev.join() === 'explode,rebuild' && out === 1 && V.eT === 0, `${ev.join(',')} · eT after first ${out}`);
+    resetSlide(true); }
+  VIEW.swipes = swipes0;
   // 14 keyboard
   const b4 = cur; T += 1000; dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); ok('key-next', cur === b4 + 1);
   // 15 every slide of the deck renders without a frame error
@@ -927,7 +1041,7 @@ async function probe(){
    recordings/ on this computer. REPLAY (?replay=name) feeds a recording back
    through onDetections exactly as the camera would and scores each take.
    ========================================================================== */
-const REC = { phase: 'off', i: 0, takes: [], name: '', frames: [], t0: 0, ev0: 0, video: null, timer: 0 };
+const REC = { phase: 'off', i: 0, takes: [], name: '', frames: [], ms: [], t0: 0, ev0: 0, video: null, timer: 0 };
 const recEl = $('rec');
 function prepTake(take){                       // same starting state for recording and replay
   if (V.focus) unfocus();
@@ -937,9 +1051,9 @@ function prepTake(take){                       // same starting state for record
   resetSlide(true);
   lastNav = lastPeace = -9e9; lastNavDir = 0; returnArmed = true;
 }
-REC.capture = (res, vw, vh, now) => { REC.video = { w: vw, h: vh }; REC.frames.push(encodeFrame(res, now - REC.t0)); };
+REC.capture = (res, vw, vh, now) => { REC.video = { w: vw, h: vh }; REC.frames.push(encodeFrame(res, now - REC.t0)); REC.ms.push(TRACK.ms); };
 function recSave(){
-  const body = { version: FORMAT_VERSION, app: 'linkpresent', created: new Date().toISOString(), ua: navigator.userAgent,
+  const body = { version: FORMAT_VERSION, app: 'linkpresent', build: BUILD, created: new Date().toISOString(), ua: navigator.userAgent,
                  deck: DECK_NAME, takes: REC.takes };
   return fetch('/api/recordings?name=' + encodeURIComponent(REC.name), { method: 'POST', body: JSON.stringify(body) })
     .then(r => r.json()).then(j => { REC.saved = j.file || REC.saved; return j; }).catch(() => ({ error: 'save failed' }));
@@ -1010,7 +1124,7 @@ function recStart(){
   const step = () => {
     if (REC.phase !== 'count') return;
     if (--REC.count > 0){ recRender(); REC.timer = setTimeout(step, 800); return; }
-    REC.phase = 'rec'; REC.frames = []; REC.t0 = performance.now(); REC.ev0 = EVENTS.length; recRender();
+    REC.phase = 'rec'; REC.frames = []; REC.ms = []; REC.t0 = performance.now(); REC.ev0 = EVENTS.length; recRender();
     REC.timer = setTimeout(recStop, take.secs * 1000);
     REC.tick = setInterval(() => REC.phase === 'rec' && recRender(), 250);
   };
@@ -1021,8 +1135,11 @@ function recStop(){
   clearTimeout(REC.timer); clearInterval(REC.tick);
   const take = TAKES[REC.i];
   const live = countEvents(EVENTS.slice(REC.ev0));
+  const secs = Math.max(.001, (performance.now() - REC.t0) / 1000), ms = REC.ms.slice().sort((a, b) => a - b);
   REC.pending = { id: take.id, title: take.title, slide: take.slide, expect: take.expect, secs: take.secs,
-                  screen: { w: W, h: H }, video: REC.video, frames: REC.frames, live, verdict: evaluate(take.expect, live) };
+                  screen: { w: W, h: H }, video: REC.video, frames: REC.frames, live, verdict: evaluate(take.expect, live),
+                  settings: { swipes: !!VIEW.swipes, layout: LAYOUTS[VIEW.layout % LAYOUTS.length].name },   // replays run the take with these
+                  perf: { fps: +(REC.frames.length / secs).toFixed(1), trackMs: Math.round(ms[ms.length >> 1] || 0), delegate: TRACK.delegate } };
   REC.phase = 'review'; recRender();
 }
 function recKeep(){
@@ -1059,6 +1176,7 @@ async function replay(name){
   const only = Q.get('only') ? Q.get('only').split(',') : null;   // ?only=swipe-next,grab replays just those takes
   for (const take of rec.takes){
     if (only && !only.includes(take.id)) continue;
+    VIEW.swipes = take.settings ? !!take.settings.swipes : true;   // as recorded (before the setting existed, swipes were on)
     prepTake(take);
     await wait(1400);
     statusEl.textContent = `replaying ${take.id}…`;
@@ -1100,6 +1218,7 @@ const KEYS = {
   c: () => { VIEW.cam++; saveView(); applyView(); toast(`CAMERA ${Math.round(CAM_LEVELS[VIEW.cam % 4] * 100)}%`); },
   g: () => { VIEW.glass++; saveView(); applyView(); toast(`GLASS ${Math.round(GLASS_LEVELS[VIEW.glass % 4] * 100)}%`); },
   l: () => { VIEW.layout++; saveView(); applyView(); toast(LAYOUTS[VIEW.layout % LAYOUTS.length].name); },
+  w: () => { VIEW.swipes = !VIEW.swipes; saveView(); toast(VIEW.swipes ? 'SWIPES ON · open hand, sweep fast' : 'SWIPES OFF · point & hold on the edges'); },
   h: () => camOn ? stopCamera() : startCamera(), '?': () => document.body.classList.toggle('nolegend'), Escape: () => { if (V.focus) unfocus(); else if (document.body.classList.contains('clean')) toggleClean(); },
 };
 addEventListener('keydown', (e) => {
