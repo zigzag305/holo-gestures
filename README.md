@@ -132,32 +132,40 @@ so bars grow in and doughnut slices pop out when the slide comes apart.
 (six sample decks ship there — see *Sample decks* below). Point it at another folder with
 `{"decks": "/path/to/decks"}` in `holo.json`.
 
+Everything works with **one hand**: you talk, you point.
+
 | Do this | Get this |
 |---|---|
-| **Right hand** open, sweep it **left** | next slide |
-| **Left hand** open, sweep it **right** | previous slide (moving a hand back out never turns a page) |
+| **Point** (index finger out) | red laser dot for the audience |
+| Point at the **›** on the right edge and **hold** (~½ s, the ring fills) | next slide |
+| Point at the **‹** on the left edge and hold | previous slide |
+| Point at the **✦** at the top right and hold | the slide comes apart into floating layers · again = rebuild |
 | **👌** on a piece: thumb and index touching, **other three fingers up** | grab it out of the slide and move it; open to drop it |
-| …and **👌 with the other hand**, stretch | resize just that piece |
 | **Quick 👌** on a piece, then open | focus: it flies to the front, everything else dims · again = back |
-| **👌 with both hands**, pull apart | the slide comes apart into floating layers |
-| **👌 with both hands**, together | it rebuilds · **twist** = turn the hologram |
-| **Point** (index finger) | red laser pointer for the audience |
 | 👌 on empty space and drag | turn the slide in 3D |
 | **Peace ✌** held | reset the slide |
+| *Optional, two hands:* hold a piece + **👌** with the other hand, stretch | resize just that piece |
+| *Optional, two hands:* **👌👌** pull apart / together | explode / rebuild · **twist** = turn |
+| *Off by default (**W**):* right hand sweeps left / left hand sweeps right | next / previous |
 
-Why 👌 and not any pinch: a hand resting while you talk is curled, and a curled hand touches thumb to
-index all the time. Lifting the other three fingers is what makes a grab deliberate. Why one direction
-per hand: to swipe back with your right hand you first move it left, and that move looked like "next".
+Why point-and-hold instead of swiping: in a normal room in the evening a laptop webcam runs at 8–11
+frames a second, and the hand tracker loses a fast-moving hand completely; it only sees the slow trip
+back, which looks like a swipe the other way. A held finger survives that. Why 👌 and not any pinch: a
+hand resting while you talk is curled, and a curled hand touches thumb to index all the time.
+
+**Layout:** you sit in a **self-view tile at the bottom right**, like any meeting app, with the slide
+large. Your hands still steer across the whole screen. **L** switches to the hologram layouts (slide
+floating over the full camera, or beside you).
 
 **On screen:** the page opens with a card for each gesture (**?** hides it and brings it back).
 While you present, the ring at your fingertip fills as thumb and index close (full, with the other fingers up = 👌), and
-a label under it says what LinkPresent sees: *open*, *👌 to grab*, *holding chart*, *lift the other 3 fingers*, *point*… —
+a label under it says what LinkPresent sees: *laser*, *hold · next slide*, *👌 to grab*, *holding chart*, *lift the other 3 fingers*… —
 so you learn the poses fast, and a misread shows the moment it happens. Meeting view hides the labels.
 A grab holds through brief tracking glitches: one misread frame, or the hand lost for a split second.
 
 Keys work too (presenter clickers send these): **← →** / PageUp / PageDown · **E** explode ·
 **R** reset · **O** meeting view (hides all controls) · **N** speaker notes · **C** camera
-brightness · **G** slide glass · **L** layout (slide left/right of you) · **F** fullscreen · **?** help.
+brightness · **G** slide glass · **L** layout (self-view tile, or the hologram layouts) · **W** swipes on/off · **F** fullscreen · **?** help.
 Mouse: drag pieces, drag empty space to turn, wheel to pull apart, double-click to reset.
 
 ### Use it in a meeting (any app, via OBS Virtual Camera)
@@ -194,8 +202,8 @@ Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
 ### Record your hands (so the gestures get tuned to real people)
 
 Open **http://localhost:4890/linkpresent?record=1** with your webcam on. A coach walks you through
-eight short takes: just presenting (nothing should fire), swiping next and back, pulling a slide
-apart, grabbing a chart, tapping to bring a card forward, the laser pointer and the peace-sign reset.
+eight short takes: just presenting (nothing should fire), pointing at the next / back / pull-apart
+targets, grabbing a chart, tapping to bring a card forward, the laser pointer and the peace-sign reset.
 Do each one naturally; the coach shows live what the engine saw. **Space** starts and ends a take,
 **R** redoes it, **S** skips it.
 
