@@ -3,16 +3,19 @@
 Open work, in order. Update this file as things land; `CLAUDE.md` holds only what stays true.
 
 ## Next
-1. **Real hands as tests.** Two real sessions in `recordings/`, both replay 8/8 and 4/4.
+1. **Real hands as tests.** Three real sessions in `recordings/`, all replay clean.
    - `hands-20261101-1135` (~18 fps) → 👌 to grab; per-hand swipes; label by majority; screen-width pull-apart.
-   - `hands-20261103-2325` (8–11 fps, evening light): the tracker lost the hand for the fast part of every
-     swipe, and the right hand never made 👌 for the two-hand pull. He asked for one-hand presenting and
-     a self-view tile. → **point & hold on edge targets** (next / back / pull apart), swipes off by default
-     (W), self-view tile layout, recordings now stamp build + fps + tracking ms + settings per take.
-   *Needs: a session with the new takes* (point-next, point-back, point-apart, grab, tap) **in good light**,
-   then compare its `perf.fps` with these two.
-   Open: is 8–11 fps the camera (light) or the tracker (Intel GPU)? `perf.trackMs` will tell. The laser
-   fires while talking (pointing at rest). HOLO (`holo.html`) still uses the old pinch.
+   - `hands-20261103-2325` (8–11 fps; ran the PR #4 engine — the update never reached his machine) →
+     one hand, self-view tile, swipes off, point & hold targets, js/ no-cache, build + perf in recordings.
+   - `hands-20261107-1043` (build 1376eec; tracking 70–90 ms a frame with a hand on the GPU → 11–14 fps):
+     the dot never rested on an edge target (it rests on content) and the pointing fingertip sits high
+     in the frame; every pinch was curled; ✌ was perfect. → **✌ turns pages per hand**, the laser's own
+     map (height re-centred), reset to R / ✦ rebuild, fix: an instant jump back to a slide still
+     flying out hid it.
+   *Needs:* a session with the new takes (✌ next / ✌ back / ✦ / laser).
+   Open: tracking cost — 70–90 ms per frame on his Intel Mac GPU caps fps; try the CPU delegate and a
+   smaller camera frame, measured with `perf.trackMs`. Whether he wants grab at all. HOLO still uses
+   the old pinch.
 2. **PowerPoint as the reference.** Done: five sample decks exported from PowerPoint into `decks/pdf/`;
    `tools/fidelity.py` scores against those and falls back to LibreOffice for decks without one
    (still `velora-q3-2026-qbr`). First PowerPoint comparison (2026-11-01): 35/35 slides ≥ 80%.
