@@ -22,7 +22,7 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
 | `tools/check.py` | every check in one command (runs `fidelity.py` too when LibreOffice + Poppler exist) |
 | `tools/fidelity.py` | slide-by-slide score vs the deck's PowerPoint PDF (`decks/pdf/`), else LibreOffice → `state/fidelity/report.html` |
-| `recordings/` | real hand sessions (`?record=1`), replayed as tests by `check.py`; `synthetic-smoke` is simulated (`tools/make_synthetic_recording.js`) |
+| `recordings/` | real hand sessions, replayed as tests by `check.py`; `synthetic-smoke` is simulated (`tools/make_synthetic_recording.js`). New sessions (`?record=1`) save to `recordings/inbox/` (gitignored): to make one a test, **commit it under `recordings/`** — never save into `recordings/` directly, or the user's next `git pull` collides with their own untracked copy |
 | `decks/` | six fictional sample decks, each built a different way (see README *Sample decks*); the probe battery is written for `velora-q3-2026-qbr.pptx` |
 | `decks/pdf/` | PowerPoint's own PDF export of a deck (`<deck>.pdf`): the fidelity reference, preferred over LibreOffice |
 | `vendor/` | self-hosted MediaPipe + three.js |

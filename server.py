@@ -14,9 +14,9 @@ Endpoints:
   GET  /api/deck?name=  → that deck unpacked into layered pieces (pptx_deck.py)
   GET  /api/deck/media  → one picture out of a deck (?name=&p=ppt/media/…)
   POST /api/deck/upload → save a .pptx into decks/ (?name=file.pptx, raw body)
-  GET  /api/recordings  → [{name, size, mtime}] of recorded hand sessions in recordings/
+  GET  /api/recordings  → [{name, size, mtime, inbox}] of recorded hand sessions (recordings/ + recordings/inbox/)
   GET  /api/recordings/<name> → one recording (JSON)
-  POST /api/recordings?name= → save a recording (JSON body; stored gzipped). Hand points only,
+  POST /api/recordings?name= → save a recording into recordings/inbox/ (JSON body; stored gzipped). Hand points only,
                          never camera images — the browser sends what the tracker measured.
   POST /api/state      → future Jarvis hook: writes state/holo-state.json so the
                          big brain can react to what the hands did ("Card pinned,
@@ -141,25 +141,34 @@ MAX_UPLOAD = 200 * 1024 * 1024
 
 # ---------- RECORDED HANDS: what the tracker saw while a person did each gesture ----------
 REC_DIR = os.path.join(ROOT, "recordings")
+# New sessions land in recordings/inbox/ (gitignored). Committed recordings live in recordings/ itself.
+# (2026-11-07: saving straight into recordings/ made every `git pull` abort once that same file was
+# committed upstream — "untracked working tree files would be overwritten". Twice.)
+REC_INBOX = os.path.join(REC_DIR, "inbox")
 MAX_RECORDING = 40 * 1024 * 1024
 REC_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 
-def rec_path(name):
-    """Plain names only, always inside recordings/, always .json.gz."""
+def rec_path(name, write=False):
+    """Plain names only, always .json.gz. Writes go to recordings/inbox/; reads look in recordings/
+    (committed) first, then the inbox."""
     name = (name or "").removesuffix(".json.gz").removesuffix(".json")
     if not REC_NAME.match(name) or ".." in name:
         return None
-    return os.path.join(REC_DIR, name + ".json.gz")
+    if write:
+        return os.path.join(REC_INBOX, name + ".json.gz")
+    committed = os.path.join(REC_DIR, name + ".json.gz")
+    return committed if os.path.isfile(committed) else os.path.join(REC_INBOX, name + ".json.gz")
 
 def list_recordings():
-    try:
-        names = [n for n in os.listdir(REC_DIR) if n.endswith(".json.gz")]
-    except OSError:
-        return []
     out = []
-    for n in names:
-        st = os.stat(os.path.join(REC_DIR, n))
-        out.append({"name": n[:-8], "size": st.st_size, "mtime": st.st_mtime})
+    for d, inbox in ((REC_DIR, False), (REC_INBOX, True)):
+        try:
+            names = [n for n in os.listdir(d) if n.endswith(".json.gz")]
+        except OSError:
+            continue
+        for n in names:
+            st = os.stat(os.path.join(d, n))
+            out.append({"name": n[:-8], "size": st.st_size, "mtime": st.st_mtime, "inbox": inbox})
     return sorted(out, key=lambda x: x["name"])
 
 def app_version():
@@ -302,7 +311,7 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         if p == "/api/recordings":
             qs = parse_qs(urlparse(self.path).query)
-            path = rec_path((qs.get("name") or [""])[0])
+            path = rec_path((qs.get("name") or [""])[0], write=True)
             if not path:
                 return self._send(400, {"error": "name: letters, digits, . _ - only"})
             n = int(self.headers.get("Content-Length") or 0)
@@ -314,7 +323,7 @@ class H(BaseHTTPRequestHandler):
                 assert isinstance(data, dict) and isinstance(data.get("takes"), list)
             except Exception:
                 return self._send(400, {"error": "not a recording"})
-            os.makedirs(REC_DIR, exist_ok=True)
+            os.makedirs(REC_INBOX, exist_ok=True)
             tmp = path + ".tmp"
             with gzip.open(tmp, "wb") as f:
                 f.write(raw)

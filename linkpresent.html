@@ -1090,7 +1090,7 @@ async function probe(){
 /* ============================================================================
    RECORD (?record=1) — a coach walks you through each gesture while the engine
    runs live; what the tracker saw (hand points only, never images) is saved to
-   recordings/ on this computer. REPLAY (?replay=name) feeds a recording back
+   recordings/inbox/ on this computer. REPLAY (?replay=name) feeds a recording back
    through onDetections exactly as the camera would and scores each take.
    ========================================================================== */
 const REC = { phase: 'off', i: 0, takes: [], name: '', frames: [], ms: [], t0: 0, ev0: 0, video: null, timer: 0 };
@@ -1162,8 +1162,8 @@ function recRender(){
       el('td', t.verdict.pass ? 'ok' : 'no', tr).textContent = t.verdict.pass ? '✓' : '✗';
       el('td', null, tr).textContent = t.title; el('td', 'live', tr).textContent = t.verdict.detail; }
     const p = el('p', null, recEl);
-    p.innerHTML = 'Saved as <code></code>. Send that file to Claude (or commit it): each take becomes a test that runs in <code>python3 tools/check.py</code>.';
-    p.querySelector('code').textContent = REC.saved || ('recordings/' + REC.name + '.json.gz');
+    p.innerHTML = 'Saved as <code></code> — send that file to Claude. Once it is added to the project, each take becomes a test in <code>python3 tools/check.py</code>. (The inbox is yours: updates never touch it.)';
+    p.querySelector('code').textContent = REC.saved || ('recordings/inbox/' + REC.name + '.json.gz');
     const row = el('div', 'row', recEl);
     row.append(btn('RECORD AGAIN', () => { REC.takes = []; REC.i = 0; REC.name = recName(); REC.phase = 'ready'; recRender(); }, true));
   }
