@@ -176,14 +176,14 @@
 <div id="legend">
   <div class="gh">Gestures <span>one hand is enough · a curled or resting hand does nothing · press ? to hide / show</span></div>
   <div class="cards">
-    <div class="card"><i>☝️ ›</i><b>Next slide</b>Point at the › on the RIGHT edge and hold it there.<u>the ring fills · one slide per visit</u></div>
-    <div class="card"><i>‹ ☝️</i><b>Previous slide</b>Point at the ‹ on the LEFT edge and hold it there.<u>the ring fills · one slide per visit</u></div>
-    <div class="card"><i>☝️ ✦</i><b>Pull apart</b>Point at the ✦ at the top right and hold.<u>layers explode · again = rebuild</u></div>
+    <div class="card"><i>✌️</i><b>Next slide</b>RIGHT hand: a peace sign for a second. Drop it, show it again for the next one.<u>one slide per sign</u></div>
+    <div class="card"><i>✌️</i><b>Previous slide</b>LEFT hand: a peace sign for a second.<u>one slide per sign</u></div>
     <div class="card"><i>☝️</i><b>Laser</b>Index finger out, other fingers folded.<u>a red dot where you point</u></div>
-    <div class="card"><i>👌</i><b>Grab</b>Thumb and index touching, other three fingers UP. Move, open to drop.<u>pull a piece out</u></div>
-    <div class="card"><i>👌</i><b>Tap</b>A quick 👌 on a piece, then open.<u>bring it to the front · again = back</u></div>
-    <div class="card"><i>👌 + 👌</i><b>Two hands (optional)</b>Hold a piece and 👌 with the other hand to resize; 👌👌 apart to explode.<u>bigger / smaller · twist = turn</u></div>
-    <div class="card"><i>✌️</i><b>Reset</b>Hold a peace sign for one second.<u>everything back in place</u></div>
+    <div class="card"><i>☝️ ✦</i><b>Pull apart</b>Point, put the dot on the ✦ at the top right and hold.<u>layers explode · again = rebuild, all back</u></div>
+    <div class="card"><i>☝️ ‹ ›</i><b>Edge arrows</b>The dot held on the › or ‹ at the screen edges also turns pages.<u>when you'd rather not lift ✌</u></div>
+    <div class="card"><i>👌</i><b>Grab · optional</b>Thumb and index touching, other three fingers UP. Move, open to drop.<u>pull a piece out</u></div>
+    <div class="card"><i>👌</i><b>Tap · optional</b>A quick 👌 on a piece, then open.<u>bring it to the front · again = back</u></div>
+    <div class="card"><i>R</i><b>Reset</b>The R key, or rebuild with the ✦.<u>everything back in place</u></div>
   </div>
   <div class="keys"><b>The ring at your fingertip</b> fills as thumb and index close; with the other fingers up, full = 👌. The label shows what LinkPresent sees.
     <br><b>KEYS</b> ← → · E explode · R reset · O meeting view · N notes · C camera · G glass · L layout · W swipes on/off · F fullscreen</div>
@@ -306,6 +306,7 @@ function showSlide(i, dir = 1, instant = false){
   i = clamp(i, 0, DECK.slides.length - 1);
   const prev = cur;
   if (trans && SLIDES[trans.from] && trans.from !== i){ SLIDES[trans.from].el.style.display = 'none'; trans = null; }
+  if (trans && trans.from === i) trans = null;   // coming back to the slide that was leaving: its exit must not finish (it hid the slide)
   if (i !== prev && SLIDES[prev] && !instant) trans = { from: prev, dir, t0: performance.now() };
   else if (SLIDES[prev] && i !== prev) SLIDES[prev].el.style.display = 'none';
   cur = i;
@@ -524,7 +525,27 @@ function px(p){
   const nx = .5 + (p.x - .5) * AMP, ny = .5 + (p.y - .5) * AMP;
   return { x: W - (nx * MAP.sx + MAP.ox), y: ny * MAP.sy + MAP.oy };
 }
-const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pointT: null, dwell: null, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
+/* THE LASER'S OWN MAP (2026-11-07, recordings/hands-20261107-1043): a pointing fingertip sits HIGH in the
+   camera picture (median y .32 in both sessions that pointed, palm at .58) and his comfortable sideways
+   range was x .19–.67 (.29–.85 in the first session). Around the centre at AMP 1.45 the edge targets
+   needed 80% of the frame width and the dot lived in the top of the screen — next 0/3, back 0/3.
+   He also never rested the dot ON a target; he rested on content. Pages turn with ✌ now (PEACE).
+   While a hand points, the dot is centred on PTR_Y0. A higher gain was tried (2.1) and rejected: his
+   pointing moves in big sweeps, the dot flew across the screen, and resting on left-hand content
+   became a "back" hold. So the sideways gain stays AMP's; only the height is re-centred, gently
+   (.38, not .33: on all three sessions' replays that adds no accidental holds). */
+const PTR_GAIN = 1.45, PTR_X0 = .5, PTR_Y0 = .38;
+function ptrPx(p){
+  if (MAP.id) return { x: W - p.x * W, y: p.y * H };   // test feeds (no camera): plain screen fractions
+  const nx = .5 + (p.x - (1 - PTR_X0)) * PTR_GAIN, ny = .5 + (p.y - PTR_Y0) * PTR_GAIN;
+  return { x: W - (nx * MAP.sx + MAP.ox), y: ny * MAP.sy + MAP.oy };
+}
+/* ✌ TURNS PAGES (2026-11-07, recordings/hands-20261107-1043): he held a ✌ for 12 s and the tracker saw it
+   in 100% of 165 frames, labelled his right hand every time (372/372 across two sessions); outside the
+   peace takes a ✌ never lasted more than 4 frames. The most reliable pose he has, so it does the most
+   frequent job. (It used to reset the slide: that is the R key now, and rebuilding with ✦.) */
+const PEACE_FRAMES = 8, PEACE_GAP_MS = 400;
+const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pointT: null, dwell: null, peaceT: -9e9, peaceDone: false, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
                        oe: null, cur: null, m: null, hover: null, upT: 0, _pp: null, pp: null, movingT: null });
 const HANDS = [mkHand(), mkHand()];
 const assignHands = (lms) => assignSlots(lms, HANDS, px);   // identity-stable slots (camera path only)
@@ -549,7 +570,9 @@ function ingestHands(raw, now = performance.now()){
     if (lm.hand === 'L' || lm.hand === 'R'){ st.votes[lm.hand]++; st.hand = st.votes.L > st.votes.R ? 'L' : 'R'; }
     if (m.openish) st.openT = now;
     if (!guideTimer && !PROBE && !REPLAY) guideTimer = setTimeout(() => document.body.classList.add('nolegend'), 25000);   // the guide steps aside 25 s after it first sees you (? brings it back)
-    const cur = st.cur = oneEuro(st, px(m.tip), now);
+    // pointing (or a blink ago): the laser's map; otherwise the hand map. Same filter, so the dot glides between them
+    const aiming = m.point || (st.pointT != null && now - st.pointT <= POINT_GRACE_MS);
+    const cur = st.cur = oneEuro(st, aiming ? ptrPx(m.tip) : px(m.tip), now);
     const palm = px(m.palm);
     // stillness re-arms the opposite swipe (see SWIPE_RETURN_LOCK)
     const sp = st.pp ? Math.hypot(palm.x - st.pp.x, palm.y - st.pp.y) / Math.max(1, now - st.pp.t) * 1000 : 0;
@@ -592,9 +615,17 @@ function ingestHands(raw, now = performance.now()){
         }
       }
     } else st.swipe.length = 0;
-    // PEACE ✌ held = reset this slide
-    if (m.peace && !st.pinch){ if (++st.peaceN === 8 && now - lastPeace > 1500){ lastPeace = now; resetSlide(); } }
-    else st.peaceN = 0;
+    // PEACE ✌ = NEXT slide with the right hand, PREVIOUS with the left — one per showing: drop it for
+    // PEACE_GAP_MS to show it again (a long hold, or a flickering one, turns one page)
+    if (m.peace && !st.pinch){
+      st.peaceT = now;
+      if (++st.peaceN >= PEACE_FRAMES && !st.peaceDone){
+        st.peaceDone = true; lastPeace = now;
+        const side = st.hand || (palm.x > W / 2 ? 'R' : 'L');
+        if (V.focus) unfocus();
+        nav(side === 'L' ? -1 : 1, now);
+      }
+    } else { st.peaceN = 0; if (st.peaceDone && now - st.peaceT > PEACE_GAP_MS) st.peaceDone = false; }
     // POINT = laser pointer for the audience
     if (m.point && !st.pinch){ st.pointN++; st.pointT = now; if (st.pointN === 4) emit('laser'); if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
     else st.pointN = 0;
@@ -609,7 +640,9 @@ function ingestHands(raw, now = performance.now()){
 /* POINT & HOLD (2026-11-03: "two hands in front of the camera is hard — you show one hand because you're
    talking and pointing"). EDGE_X / EDGE_TOP: the edge bands, as fractions of the screen; NAV_HOLD_MS: how
    long the laser rests there; POINT_GRACE_MS: a pointing hand misread for a frame or two keeps its hold. */
-const EDGE_X = .08, EDGE_TOP = .09, NAV_HOLD_MS = 600, POINT_GRACE_MS = 350;
+// (2026-11-07: bands widened from .08 / .09 along with the laser's map — he reached the top target and
+// slid out of its 68 px band at once)
+const EDGE_X = .10, EDGE_TOP = .12, NAV_HOLD_MS = 600, POINT_GRACE_MS = 350;
 /* The fingertip must be ON the target, on screen: next/back in the middle 60% of the height, the top one
    within 9% of APART_X. (Replays of both real sessions: all 5 accidental holds had the fingertip
    OFF the screen — a finger raised while talking maps above the top edge — or far from the target.)
@@ -634,7 +667,7 @@ function edgeDwell(st, cur, now){
   st.dwell.done = true;                            // leave the band to do it again
   if (z === 'apart'){
     if (V.focus) unfocus();
-    if (EX.out || V.eT > .5){ V.eT = 0; EX.out = false; emit('rebuild'); toast('REBUILT'); }
+    if (EX.out || V.eT > .5){ resetSlide(true); V.eT = 0; EX.out = false; emit('rebuild'); toast('REBUILT · everything back in place'); }
     else { V.eT = 1; EX.out = true; emit('explode'); toast('PULLED APART'); }
   } else { if (V.focus) unfocus(); nav(z === 'next' ? 1 : -1, now); }
 }
@@ -658,7 +691,7 @@ function poseLabel(st, i){
   }
   if (!m) return '';
   if (m.pinch < PINCH_IN && st.hover) return '✊ lift the other 3 fingers to grab';   // curled pinch: on purpose not a grab (PINCH_FINGERS_UP)
-  if (st.peaceN > 0) return '✌ hold to reset';
+  if (st.peaceN > 0) return st.peaceDone ? '✌ drop it to turn again' : '✌ hold · ' + ((st.hand || 'R') === 'L' ? 'previous slide' : 'next slide');
   if (m.point) return '☝ point';
   if (st.hover) return (m.openish ? '✋' : '·') + ' 👌 to grab';
   if (m.openish) return '✋ open';
@@ -726,9 +759,9 @@ function drawHud(now){
         HX.beginPath(); HX.arc(c.x, c.y, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); HX.stroke(); HX.shadowBlur = 0; }
     }
     handLabel(c, poseLabel(st, HANDS.indexOf(st)));
-    if (st.peaceN > 0 && st.peaceN < 8){
+    if (st.peaceN > 0 && st.peaceN < PEACE_FRAMES){
       HX.strokeStyle = 'rgba(255,207,125,.9)'; HX.lineWidth = 3;
-      HX.beginPath(); HX.arc(c.x, c.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * st.peaceN / 8); HX.stroke();
+      HX.beginPath(); HX.arc(c.x, c.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * st.peaceN / PEACE_FRAMES); HX.stroke();
     }
   }
   drawEdges(now);
@@ -807,9 +840,8 @@ function demoSteps(){
   const C = {};
   const hold = (ms, f) => ({ d: ms, f });
   const none = (ms) => hold(ms, () => []);
-  // one hand: point at the › and hold (next slide), then at the ✦ (pull apart) — the peace sign at the end rebuilds
-  const next = [hold(450, () => [handAtTip(W * .6, H * .5, 'point')]), hold(900, () => [handAtTip(W * .955, H * .5, 'point')]),
-                hold(300, () => [handAtTip(W * .62, H * .5, 'point')]), none(800)];
+  // one hand: ✌ with the right hand (next slide), then point & hold the ✦ (pull apart); the ✦ again at the end rebuilds
+  const next = [hold(1000, () => [synthHand(.66, .55, 'peace')]), none(900)];
   const apart = [hold(400, () => [handAtTip(W * .62, H * .3, 'point')]), hold(900, () => [handAtTip(W * APART_X, H * .045, 'point')]),
                  hold(300, () => [handAtTip(W * .62, H * .3, 'point')]), none(1500)];
   const grab = [{ d: 10, f: () => [], s: () => { const p = biggestPiece(q => q.d.kind === 'chart' || q.d.kind === 'table'); C.g = p ? screenOf(p) : { x: W / 2, y: H / 2 }; } },
@@ -822,8 +854,8 @@ function demoSteps(){
                  hold(200, () => [handAtTip(C.f.x, C.f.y, 'open')]), hold(1800, () => [synthHand(.85, .8, 'open')]),
                  hold(150, () => [synthHand(.85, .8, 'pinch')]), hold(200, () => [synthHand(.85, .8, 'open')]), none(700)];
   const laser = [hold(1400, k => [synthHand(.35 + .3 * Math.sin(k * 3), .45 + .08 * Math.cos(k * 5), 'point')]), none(300)];
-  const peace = [hold(700, () => [synthHand(.7, .55, 'peace')]), none(1100)];
-  return [none(1200), ...next, ...apart, ...grab, ...focus, ...laser, ...peace];
+  const rebuild = [hold(400, () => [handAtTip(W * .62, H * .3, 'point')]), hold(900, () => [handAtTip(W * APART_X, H * .045, 'point')]), none(1100)];
+  return [none(1200), ...next, ...apart, ...grab, ...focus, ...laser, ...rebuild];
 }
 let SIMQ = null;
 function simTick(now){
@@ -885,10 +917,26 @@ async function probe(){
   feed(16, k => [handAtTip(at.x - 160, at.y - 60, 'pinch'), synthHand(lerp(.5, .85, k), .8, 'pinch')]);
   ok('two-hand-resize', p.st.ts > 1.3, p.st.ts.toFixed(2));
   feed(3, () => [handAtTip(at.x - 160, at.y - 60, 'open')]); clear();
-  // 8 peace resets
-  feed(12, () => [synthHand(.7, .55, 'peace')]); clear();
-  ok('peace-reset', Math.abs(p.st.tx) < 1 && p.st.ts === 1 && V.eT === 0, `tx=${p.st.tx.toFixed(0)} s=${p.st.ts}`);
+  // 8 the R key resets (✌ turns pages now)
+  dispatchEvent(new KeyboardEvent('keydown', { key: 'r' })); await wait(50);
+  ok('key-reset', Math.abs(p.st.tx) < 1 && p.st.ts === 1 && V.eT === 0, `tx=${p.st.tx.toFixed(0)} s=${p.st.ts}`);
   await wait(500);
+  // ✌ TURNS PAGES: right hand = next, left hand = previous; one page per showing, however long or flickery
+  { const b0 = cur; T += 2000;
+    feed(20, () => [synthHand(.7, .55, 'peace')]); const one = cur;                    // right side, held
+    feed(2, () => [synthHand(.7, .55, 'open')]); feed(30, () => [synthHand(.7, .55, 'peace')]);   // a 2-frame flicker mid-hold
+    const still = cur; clear();
+    feed(5, () => [synthHand(.7, .55, 'peace')]); const short = cur; clear();          // a glimpse (< PEACE_FRAMES) does nothing
+    feed(12, () => [synthHand(.3, .55, 'peace')]); const back = cur; clear();          // left side = left hand → back
+    ok('peace-pages', one === b0 + 1 && still === one && short === one && back === b0,
+       `${b0} → right ✌ ${one} → flicker ${still} → glimpse ${short} → left ✌ ${back}`); }
+  // …the tracker's hand label decides, not where the hand is: a RIGHT hand showing ✌ left of centre is next
+  { const b0 = cur; T += 2000;
+    for (let k = 0; k < 12; k++){ T += 33; onDetections({ landmarks: [synthImage(1 - .3, .55, 'peace').map(q => ({ x: q.x, y: q.y }))],
+      handednesses: [[{ score: .9, categoryName: 'Right' }]] }, 1280, 720, T); }
+    T += 33; onDetections({ landmarks: [] }, 1280, 720, T); T += HOLD_GRACE_MS + 20; onDetections({ landmarks: [] }, 1280, 720, T);
+    updateMap(0, 0);
+    ok('peace-follows-hand-label', cur === b0 + 1, `${b0}→${cur}`); showSlide(b0, -1, true); await wait(1700); }   // let its layers land before the grab checks
   // GRAB SURVIVES A GLITCH: mid-drag, one frame reads the fingers open and then the tracker loses the
   // hand for two frames (fast real hands do both). The piece must stay held the whole way and follow.
   { resetSlide(true); await wait(300);
@@ -1021,6 +1069,10 @@ async function probe(){
     ok('point-hold-top-apart', ev.join() === 'explode,rebuild' && out === 1 && V.eT === 0, `${ev.join(',')} · eT after first ${out}`);
     resetSlide(true); }
   VIEW.swipes = swipes0;
+  // going straight back (instantly) to a slide that is still flying out must leave it on screen
+  { const k = cur; nav(1, performance.now()); showSlide(k, -1, true); await wait(1500);
+    const r = SLIDES[k].el.getBoundingClientRect();
+    ok('back-to-leaving-slide', cur === k && SLIDES[k].el.style.display !== 'none' && r.width > 0, `slide ${k + 1}: ${Math.round(r.width)}px wide`); }
   // 14 keyboard
   const b4 = cur; T += 1000; dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); ok('key-next', cur === b4 + 1);
   // 15 every slide of the deck renders without a frame error
