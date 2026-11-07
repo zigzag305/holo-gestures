@@ -7,7 +7,7 @@
 //
 // Simulated performance: 30 fps with ±5 ms timing jitter and ~0.2% landmark noise, hands leaving
 // the frame between gestures.
-// Pinches are 👌 (synthHand's pinch keeps the other fingers up); pages turn by pointing at the edge targets.
+// Pinches are 👌 (synthHand's pinch keeps the other fingers up); pages turn with a peace sign per hand.
 const { chromium } = require('playwright');
 const BASE = process.argv[2] || 'http://localhost:4890';
 
@@ -29,9 +29,13 @@ const BASE = process.argv[2] || 'http://localhost:4890';
     const tipOffset = (pose) => { const lm = H.synthImage(.5, .5, pose); return { dx: (1 - lm[8].x) - .5, dy: lm[8].y - .5 }; };
     // put the INDEX TIP on a screen point (camera map: fractions of the 1280x720 video with AMP 1.45)
     const VW = 1280, VH = 720, AMP = 1.45;
-    const toImg = (x, y) => { const s = Math.max(W / VW, Hh / VH), sx = VW * s, sy = VH * s, ox = (W - sx) / 2, oy = (Hh - sy) / 2;
-      const nx = (W - x - ox) / sx, ny = (y - oy) / sy; return { fx: 1 - (.5 + (nx - .5) / AMP), fy: .5 + (ny - .5) / AMP }; };
-    const handAtTip = (x, y, pose) => { const f = toImg(x, y), o = tipOffset(pose); return hand(f.fx - o.dx, f.fy - o.dy, pose); };
+    // a pointing hand is drawn by the laser's own map (linkpresent.html PTR_GAIN / PTR_Y0); others by AMP
+    const PTR_GAIN = 1.45, PTR_Y0 = .38;
+    const toImg = (x, y, pose) => { const s = Math.max(W / VW, Hh / VH), sx = VW * s, sy = VH * s, ox = (W - sx) / 2, oy = (Hh - sy) / 2;
+      const nx = (W - x - ox) / sx, ny = (y - oy) / sy;
+      if (pose === 'point') return { fx: 1 - (.5 + (nx - .5) / PTR_GAIN), fy: PTR_Y0 + (ny - .5) / PTR_GAIN };
+      return { fx: 1 - (.5 + (nx - .5) / AMP), fy: .5 + (ny - .5) / AMP }; };
+    const handAtTip = (x, y, pose) => { const f = toImg(x, y, pose), o = tipOffset(pose); return hand(f.fx - o.dx, f.fy - o.dy, pose); };
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     // fn(k in 0..1) → [hands]; labs = the tracker's Left/Right label per hand (default: one hand is
     // the right hand; two hands are right, left)
@@ -56,16 +60,13 @@ const BASE = process.argv[2] || 'http://localhost:4890';
                                              hand(.7 + .04 * Math.sin(k * 6 + 1), .66 + .03 * Math.sin(k * 5), 'open')]),
       // (no fists: synthHand's fist puts the thumb on the index tip, which a real fist doesn't —
       //  whether real fists trigger grabs is for a real recording to show)
-      // POINT & HOLD on the edge targets (linkpresent.html EDGE_X / EDGE_TOP / APART_X): next, back, pull apart
-      'point-next': async () => { for (let r = 0; r < 3; r++){
-          await feedFor(500, () => [handAtTip(W * .5, Hh * .5, 'point')]);
-          await feedFor(900, () => [handAtTip(W * .955, Hh * .5, 'point')]);
-          await feedFor(500, () => [handAtTip(W * .55, Hh * .5, 'point')]); await none(400); } },
-      'point-back': async () => { for (let r = 0; r < 3; r++){
-          await feedFor(500, () => [handAtTip(W * .5, Hh * .5, 'point')]);
-          await feedFor(900, () => [handAtTip(W * .045, Hh * .5, 'point')]);
-          await feedFor(500, () => [handAtTip(W * .45, Hh * .5, 'point')]); await none(400); } },
-      'point-apart': async () => { for (let r = 0; r < 4; r++){   // apart, rebuild, apart, rebuild
+      // a peace sign turns the page: right hand = next, left hand = back (one per showing)
+      'peace-next': async () => { for (let r = 0; r < 3; r++){
+          await feedFor(1100, () => [hand(.66, .55, 'peace')], ['Right']); await none(800); } },
+      'peace-back': async () => { for (let r = 0; r < 3; r++){
+          await feedFor(1100, () => [hand(.34, .55, 'peace')], ['Left']); await none(800); } },
+      // point & hold on the ✦ (linkpresent.html EDGE_TOP / APART_X): pull apart, then rebuild
+      'point-apart': async () => { for (let r = 0; r < 2; r++){   // apart, rebuild
           await feedFor(500, () => [handAtTip(W * .5, Hh * .5, 'point')]);
           await feedFor(900, () => [handAtTip(W * .77, Hh * .045, 'point')]);
           await feedFor(400, () => [handAtTip(W * .6, Hh * .4, 'point')]); } await none(400); },
@@ -87,15 +88,12 @@ const BASE = process.argv[2] || 'http://localhost:4890';
           await feedFor(300, () => [hand(.85, .8, 'open')]);
           await none(900); } },
       point: async () => feedFor(4000, k => [hand(.5 + .15 * Math.cos(k * 12), .5 + .1 * Math.sin(k * 12), 'point')]),
-      peace: async () => { for (let r = 0; r < 2; r++){
-          await feedFor(1100, () => [hand(.66, .55, 'peace')]);
-          await none(1700); } },
     };
     const until = async (ph) => { while (R.phase !== ph) await sleep(50); };
     R.recNext();
     const out = [];
-    for (let i = 0; i < 8; i++){
-      await until('ready'); const id = ['rest', 'point-next', 'point-back', 'point-apart', 'grab', 'tap', 'point', 'peace'][i];
+    for (let i = 0; i < 7; i++){
+      await until('ready'); const id = ['rest', 'peace-next', 'peace-back', 'point-apart', 'grab', 'tap', 'point'][i];
       R.recStart(); await until('rec');
       await scripts[id]();
       R.recStop(); await until('review');
