@@ -132,6 +132,29 @@ def check_routes(base, deck_names):
     except urllib.error.HTTPError as e:
         code = e.code
     report("upload rejects a non-.pptx file", code == 400, str(code))
+    # new recordings go to recordings/inbox/ (gitignored), so `git pull` never collides with a session
+    # that was later committed; committed recordings in recordings/ stay readable
+    name = "zz-route-check"
+    req = urllib.request.Request(base + "/api/recordings?name=" + name, method="POST",
+                                 data=json.dumps({"takes": []}).encode(), headers={"Content-Type": "application/json"})
+    try:
+        saved = json.loads(urllib.request.urlopen(req, timeout=10).read()).get("file", "")
+    except Exception as e:  # noqa: BLE001
+        saved = str(e)
+    inbox_file = os.path.join(ROOT, "recordings", "inbox", name + ".json.gz")
+    code, body = get(base + "/api/recordings/" + name)
+    report("POST /api/recordings saves into recordings/inbox/", saved == "recordings/inbox/" + name + ".json.gz" and code == 200, saved)
+    try:
+        os.remove(inbox_file)
+    except OSError:
+        pass
+    ignored = subprocess.run(["git", "check-ignore", "-q", "recordings/inbox/x.json.gz"], cwd=ROOT).returncode == 0 \
+        if os.path.isdir(os.path.join(ROOT, ".git")) else True
+    report("recordings/inbox/ is gitignored", ignored, "git check-ignore")
+    committed = sorted(n[:-8] for n in os.listdir(os.path.join(ROOT, "recordings")) if n.endswith(".json.gz"))
+    if committed:
+        code, _ = get(base + "/api/recordings/" + committed[0])
+        report("GET a committed recording", code == 200, f"{committed[0]} · {code}")
 
 
 # ---------------------------------------------------------------- 3 + 4. browser

@@ -210,9 +210,10 @@ Do each one naturally; the coach shows live what the engine saw. **Space** start
 **R** redoes it, **S** skips it.
 
 Only the 21 hand points per camera frame are saved — never an image — to
-`recordings/hands-<date>.json.gz` on your computer. Send that file to Claude or commit it: every take
-becomes a test that `tools/check.py` replays through the real camera path, so a gesture that misfired
-for you stays fixed. A take the engine missed is the most useful one to keep.
+`recordings/inbox/hands-<date>.json.gz` on your computer. The inbox is yours: git ignores it, so
+`git pull` never trips over it. Send that file to Claude; once it is added to the project under
+`recordings/`, every take becomes a test that `tools/check.py` replays through the real camera path,
+so a gesture that misfired for you stays fixed. A take the engine missed is the most useful one to keep.
 
 When a gesture is redesigned, a take done the old way keeps its frames but gets a `revised` goal with
 the reason (usually: the old movement must now fire nothing). `recordings/hands-20261101-1135` is the

@@ -103,6 +103,10 @@ const BASE = process.argv[2] || 'http://localhost:4890';
     await until('done'); await sleep(800);
     return { out, saved: REC.saved };
   });
+  // the recorder saves into recordings/inbox/ (gitignored); this one is a committed test, so move it up
+  const fs = require('fs'), path = require('path'), rec = path.join(__dirname, '..', 'recordings');
+  try { fs.renameSync(path.join(rec, 'inbox', 'synthetic-smoke.json.gz'), path.join(rec, 'synthetic-smoke.json.gz')); run.saved = 'recordings/synthetic-smoke.json.gz'; }
+  catch (e){ console.error('could not move the recording out of the inbox:', e.message); }
   console.log(JSON.stringify(run, null, 1));
   await browser.close();
 })();
