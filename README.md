@@ -166,7 +166,7 @@ so you learn the poses fast, and a misread shows the moment it happens. Meeting 
 A grab holds through brief tracking glitches: one misread frame, or the hand lost for a split second.
 
 Keys work too (presenter clickers send these): **← →** / PageUp / PageDown · **E** explode ·
-**R** reset · **O** meeting view (hides all controls) · **N** speaker notes · **C** camera
+**R** reset · **S** synthetic-hands demo · **O** meeting view (hides all controls) · **N** speaker notes · **C** camera
 brightness · **G** slide glass · **L** layout (self-view tile, or the hologram layouts) · **W** swipes on/off · **F** fullscreen · **?** help.
 Mouse: drag pieces, drag empty space to turn, wheel to pull apart, double-click to reset.
 
@@ -195,8 +195,8 @@ and column + line combos on two axes), theme colours, hidden slides, speaker not
 **What doesn't:** PowerPoint's own animations and transitions (LinkPresent brings its own motion),
 SmartArt internals, embedded video, EMF/WMF pictures; table styles are approximated.
 
-Test it without a camera: `/linkpresent?sim=1` plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**31/31**) ·
+Test it without a camera: `/linkpresent?sim=1` (or press **S**) plays a scripted demo with synthetic hands ·
+`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**40/40**) ·
 `/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat ·
 `/linkpresent?record=1` records your hands · `/linkpresent?replay=<name>` replays a recording.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.

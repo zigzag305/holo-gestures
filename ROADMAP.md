@@ -12,28 +12,22 @@ Open work, in order. Update this file as things land; `CLAUDE.md` holds only wha
      in the frame; every pinch was curled; ✌ was perfect. → **✌ turns pages per hand**, the laser's own
      map (height re-centred), reset to R / ✦ rebuild, fix: an instant jump back to a slide still
      flying out hid it.
-   *Needs:* a session with the new takes (✌ next / ✌ back / ✦ / laser).
-   Open: tracking cost — 70–90 ms per frame on his Intel Mac GPU caps fps; try the CPU delegate and a
-   smaller camera frame, measured with `perf.trackMs`. Whether he wants grab at all. HOLO still uses
-   the old pinch.
+    *Needs:* a session with the new takes (✌ next / ✌ back / ✦ / laser).
+   Done: LinkPresent now requests a `640×360` camera frame by default (4× fewer pixels uploaded to WebGL than 720p; `?cam=720` restores 720p) and `loadHandLandmarker` accepts `?delegate=cpu` to benchmark CPU vs. GPU with `perf.trackMs`. HOLO (`holo.html`) now shares `PINCH_FINGERS_UP`, `PINCH_LET_GO`, and `HOLD_GRACE_MS` on the camera path.
 2. **PowerPoint as the reference.** Done: five sample decks exported from PowerPoint into `decks/pdf/`;
    `tools/fidelity.py` scores against those and falls back to LibreOffice for decks without one
-   (still `velora-q3-2026-qbr`). First PowerPoint comparison (2026-11-01): 35/35 slides ≥ 80%.
-   Gaps it showed, to fix next:
-   - **Pie plot area** (norte slide 5): PowerPoint draws the pie about twice as big, filling the
-     chart frame; ours leaves wide margins for labels.
-   - **Stacked-bar axis max** (ribera slide 4): columns summing to 100 reach the top in PowerPoint;
-     ours picks a higher automatic max, so the bars stop short.
-3. **Commands and two focused agents.** `.claude/commands/` for verify / add-gesture / test-deck;
-   a visual-review agent and a PowerPoint-fidelity agent. Only after 1 and 2 exist.
+   (still `velora-q3-2026-qbr`). All 53/53 slides ≥ 92% (mean 97–99% per deck):
+   - **Pie plot area** (norte slide 5): fixed (`R` fills 83% of the plot box with wrapped outside labels; 82% → 96%).
+   - **Stacked-bar axis max** (ribera slide 4): fixed (outside-label headroom only applies to non-stacked outside labels; 90% → 98%).
+   - **Automatic axis steps & paragraph `spcPct`**: `niceScale` now follows PowerPoint's `1, 2, 5 × 10^k` steps across ~8.5 intervals; `pptx_deck.py` resolves `a:spcBef/a:spcPct` and `a:spcAft/a:spcPct` and gives unstyled tables default `tx1` borders.
+3. **Commands and two focused agents.** Done: `.claude/commands/` (`verify.md`, `add-gesture.md`, `test-deck.md`) and `.claude/agents/` (`visual-review.md`, `powerpoint-fidelity.md`).
 
 ## Later
 - Desktop app with a built-in virtual camera (no OBS).
 - Accounts and shared decks (database: Supabase) — only if people ask for it.
 
 ## Known gaps
-- Not yet tested on a real webcam: the swipe and two-hand explode thresholds may need tuning.
-- Fidelity: automatic axis max/steps differ from PowerPoint (see Next 2); pie plot area too small; table borders when a table
-  has no style; Georgia-only text measures differently on machines without Georgia.
+- Not yet tested on a real webcam with the new 7-take script (`peace-next`, `peace-back`, `point-apart`, `grab`, `tap`, `point`, `rest`).
+- Fidelity: Georgia-only text measures differently on machines without Georgia.
 - Not carried over from PowerPoint: animations and transitions, SmartArt internals, video,
   EMF/WMF pictures; table styles are approximated.
