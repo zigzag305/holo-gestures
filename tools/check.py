@@ -107,10 +107,21 @@ def start_server(port):
 def check_routes(base, deck_names):
     print("\nServer routes (server.py)")
     for path, want, ctype in (("/", 200, "text/html"), ("/linkpresent", 200, "text/html"),
+                              ("/office/taskpane.html", 200, "text/html"), ("/office/manifest.xml", 200, "xml"),
+                              ("/office/icon-32.png", 200, "image/png"),
                               ("/js/hands.js", 200, "javascript"), ("/api/tree", 200, "json"),
                               ("/api/decks", 200, "json")):
         code, body = get(base + path)
         report(f"GET {path}", code == want, f"{code} · {len(body)} bytes")
+    import xml.etree.ElementTree as ET
+    try:
+        m_root = ET.fromstring(open(os.path.join(ROOT, "office", "manifest.xml"), "rb").read())
+        res_ids = {el.attrib.get("id") for el in m_root.iter() if el.attrib.get("id")}
+        refs = [el.attrib.get("resid") for el in m_root.iter() if el.attrib.get("resid")]
+        missing = [r for r in refs if r not in res_ids]
+        report("office/manifest.xml valid", not missing, f"{len(refs)} resource refs" + (f" · missing: {missing}" if missing else ""))
+    except Exception as e:  # noqa: BLE001
+        report("office/manifest.xml valid", False, str(e))
     code, body = get(base + "/api/version")
     report("GET /api/version", code == 200 and "build" in json.loads(body or b"{}"), f"{code} · {body[:60].decode(errors='replace')}")
     try:   # the gesture engine must never be served from a stale cache after an update
@@ -122,7 +133,7 @@ def check_routes(base, deck_names):
         code, body = get(base + "/api/deck?name=" + urllib.request.quote(deck_names[0]))
         ok = code == 200 and json.loads(body).get("slides")
         report("GET /api/deck (first deck)", ok, f"{code}")
-    for path in ("/js/../server.py", "/vendor/../holo.json", "/js/%2e%2e/server.py",
+    for path in ("/js/../server.py", "/vendor/../holo.json", "/office/../server.py", "/js/%2e%2e/server.py",
                  "/api/deck/media?name=../server.py&p=ppt/x.png", "/api/deck?name=../server.py"):
         code, _ = get(base + path)
         report(f"refuses {path}", code in (400, 404), str(code))
@@ -248,6 +259,27 @@ def check_browser(base, deck_names, all_slides):
             loaded = pg.evaluate("() => ({ cur: window.__holo.cur, slides: window.__holo.deck.slides.length })")
             report("client-side handoff (BroadcastChannel)", loaded["cur"] == 1 and loaded["slides"] > 0, f"slide {loaded['cur'] + 1}/{loaded['slides']}")
         pg.close()
+
+        if deck_names:
+            tp = page()
+            tp.route("https://appsforoffice.microsoft.com/**", lambda route: route.abort())
+            tp.goto(base + "/office/taskpane.html", wait_until="domcontentloaded")
+            tp.wait_for_function("() => window.__officeTaskpane", timeout=15000)
+            b64 = base64.b64encode(open(os.path.join(decks_dir, deck_names[0]), "rb").read()).decode("ascii")
+            with tp.context.expect_page() as popup_info:
+                tp.evaluate("""([b64, name]) => {
+                  const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                  window.__officeTaskpane.launchWithBuffer(bin.buffer, name, 3);
+                }""", [b64, deck_names[0]])
+            stage_pg = popup_info.value
+            stage_pg.wait_for_function("() => window.__holo && window.__holo.deck && window.__holo.cur === 2", timeout=20000)
+            tp.wait_for_function("() => document.getElementById('status').textContent.includes('Live on stage')", timeout=10000)
+            stage_pg.evaluate("() => new BroadcastChannel('linkpresent-deck').postMessage({ type: 'linkpresent-slide', slide: 4 })")
+            stage_pg.wait_for_function("() => window.__holo.cur === 3", timeout=10000)
+            tp_status = tp.evaluate("() => document.getElementById('status').textContent")
+            report("office taskpane launch & slide sync", "Live on stage" in tp_status and not tp.errors, tp_status)
+            stage_pg.close()
+            tp.close()
 
         print("\nScreenshots → state/check/")
         shots = 0

@@ -21,6 +21,7 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `js/lp-render.js` · `js/lp-charts.js` · `js/lp-dom.js` | LinkPresent renderer: one DOM element per piece; charts rebuilt from the file's numbers |
 | `holo.html` | HOLO page: cards, physics, 3D props, reader, Jarvis voice, its sim + probe |
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
+| `office/` | Microsoft PowerPoint Office Add-in (`manifest.xml`, `taskpane.html`, icons, sideload guide) |
 | `tools/check.py` | every check in one command (runs `fidelity.py` too when LibreOffice + Poppler exist) |
 | `tools/fidelity.py` | slide-by-slide score vs the deck's PowerPoint PDF (`decks/pdf/`), else LibreOffice → `state/fidelity/report.html` |
 | `recordings/` | real hand sessions, replayed as tests by `check.py`; `synthetic-smoke` is simulated (`tools/make_synthetic_recording.js`). New sessions (`?record=1`) save to `recordings/inbox/` (gitignored): to make one a test, **commit it under `recordings/`** — never save into `recordings/` directly, or the user's next `git pull` collides with their own untracked copy |
@@ -41,7 +42,7 @@ Plans and open work live in `ROADMAP.md`, not here.
   Field lessons are recorded as dated comments next to the code they explain; keep them.
 - **Only the camera feed is mirrored.** Slide text and cards are DOM and never mirrored,
   or hands stop lining up with what they touch.
-- **Server paths:** static files only from `vendor/ props/ js/` (folder name matched exactly);
+- **Server paths:** static files only from `vendor/ props/ js/ office/` (folder name matched exactly);
   uploads only as plain `.pptx` names inside `decks/`. Keep both guards.
 - **LinkPresent fidelity:** a slide at rest should look like PowerPoint's own rendering;
   charts are rebuilt from data, never screenshots.

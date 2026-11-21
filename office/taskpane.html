@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkPresent for PowerPoint</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      padding: 18px 16px 24px;
+      background: radial-gradient(ellipse at 50% 0%, #13202a 0%, #070b0f 75%);
+      color: #dcebe6;
+      font: 13.5px/1.5 -apple-system, "Segoe UI", sans-serif;
+    }
+    .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+    .brand { font: 700 12px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .24em; color: #eafff8; }
+    .badge {
+      font: 600 10px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em;
+      padding: 5px 9px; border-radius: 99px; color: #7dffd9;
+      background: rgba(125,255,217,.1); border: 1px solid rgba(125,255,217,.3);
+    }
+    .badge.off { color: #ffcf7d; background: rgba(255,207,125,.1); border-color: rgba(255,207,125,.35); }
+    .panel {
+      background: rgba(10,16,20,.8); border: 1px solid rgba(125,255,217,.22);
+      border-radius: 14px; padding: 14px; margin-bottom: 12px;
+    }
+    h1 { font-size: 17px; color: #fff; margin-bottom: 6px; }
+    p.sub { color: #9fb4ab; font-size: 12.5px; margin-bottom: 14px; }
+    button.primary {
+      width: 100%; border: 0; border-radius: 99px; padding: 11px 16px; cursor: pointer;
+      background: #7dffd9; color: #05110d;
+      font: 700 12px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .12em;
+    }
+    button.primary:disabled { opacity: .55; cursor: wait; }
+    button.ghost {
+      width: 100%; margin-top: 8px; border-radius: 99px; padding: 9px 14px; cursor: pointer;
+      background: transparent; color: #bfeee0; border: 1px solid rgba(125,255,217,.32);
+      font: 600 11px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .1em;
+    }
+    label.opt {
+      display: flex; align-items: center; gap: 9px; margin-top: 11px;
+      font-size: 12.5px; color: #c9d6d2; cursor: pointer; user-select: none;
+    }
+    label.opt input { accent-color: #7dffd9; width: 15px; height: 15px; }
+    .status {
+      margin-top: 10px; min-height: 18px;
+      font: 500 11px/1.4 "SF Mono", ui-monospace, Menlo, monospace; color: #ffcf7d;
+    }
+    .status.ok { color: #7dffd9; }
+    .guide h2 {
+      font: 600 10.5px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .16em;
+      color: #7dffd9; text-transform: uppercase; margin-bottom: 8px;
+    }
+    .glist { display: grid; gap: 7px; font-size: 12px; color: #b7cbc4; }
+    .glist b { color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <span class="brand">LINKPRESENT</span>
+    <span class="badge off" id="hostBadge">CHECKING HOST…</span>
+  </div>
+
+  <div class="panel">
+    <h1>Present with one hand</h1>
+    <p class="sub" id="subtitle">Unpack this presentation into interactive 3D layers over your camera—everything stays on your machine.</p>
+
+    <button class="primary" id="presentBtn">PRESENT IN LINKPRESENT</button>
+    <button class="ghost" id="pickBtn">OR LOAD A LOCAL .PPTX FILE</button>
+    <input type="file" id="fileInput" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+
+    <label class="opt">
+      <input type="checkbox" id="cleanOpt" checked>
+      <span>Start in Meeting View (hide toolbar for Teams/Zoom)</span>
+    </label>
+    <label class="opt">
+      <input type="checkbox" id="syncOpt" checked>
+      <span>Sync slide changes from PowerPoint</span>
+    </label>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel guide">
+    <h2>One-hand controls</h2>
+    <div class="glist">
+      <div>☝️ <b>Point</b> — red laser dot; hold on <b>› / ‹</b> to turn slides or <b>✦</b> to pull layers apart.</div>
+      <div>✌️ <b>Peace sign</b> — right hand = next slide · left hand = previous slide.</div>
+      <div>👌 <b>Pinch (optional)</b> — 3 fingers up: drag a chart out, or quick tap to bring forward.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $('status');
+    const badgeEl = $('hostBadge');
+    const presentBtn = $('presentBtn');
+    const CHANNEL_NAME = 'linkpresent-deck';
+
+    let officeReady = false;
+    let hasDoc = false;
+    let stageWin = null;
+    let pendingPayload = null;
+    let syncWired = false;
+    let channel = null;
+
+    try {
+      channel = new BroadcastChannel(CHANNEL_NAME);
+      channel.onmessage = (e) => onStageMessage(e.data);
+    } catch (_) {}
+
+    addEventListener('message', (e) => {
+      if (e.origin === location.origin) onStageMessage(e.data);
+    });
+
+    function setStatus(msg, ok = false) {
+      statusEl.textContent = msg;
+      statusEl.classList.toggle('ok', ok);
+    }
+
+    function sendToStage(msg) {
+      if (channel) { try { channel.postMessage(msg); } catch (_) {} }
+      if (stageWin && !stageWin.closed) {
+        try { stageWin.postMessage(msg, location.origin); } catch (_) {}
+      }
+    }
+
+    function onStageMessage(msg) {
+      if (!msg) return;
+      if (msg.type === 'linkpresent-ready' && pendingPayload) {
+        sendToStage(pendingPayload);
+      } else if (msg.type === 'linkpresent-loaded') {
+        pendingPayload = null;
+        presentBtn.disabled = false;
+        setStatus(`Live on stage: ${msg.name} (${msg.slides} slides)`, true);
+      }
+    }
+
+    function openStageWindow() {
+      const qs = new URLSearchParams({ launcher: 'office' });
+      if ($('cleanOpt').checked) qs.set('clean', '1');
+      const url = `/linkpresent?${qs.toString()}`;
+      if (!stageWin || stageWin.closed) {
+        stageWin = window.open(url, 'linkpresent-stage');
+      } else {
+        stageWin.focus();
+      }
+      return stageWin;
+    }
+
+    function getCurrentSlideIndex() {
+      return new Promise((resolve) => {
+        if (!hasDoc || !window.Office || !Office.context.document.getSelectedDataAsync) return resolve(1);
+        try {
+          Office.context.document.getSelectedDataAsync(Office.CoercionType.SlideRange, (res) => {
+            if (res.status === Office.AsyncResultStatus.Succeeded && res.value && res.value.slides && res.value.slides.length) {
+              resolve(res.value.slides[0].index || 1);
+            } else {
+              resolve(1);
+            }
+          });
+        } catch (_) {
+          resolve(1);
+        }
+      });
+    }
+
+    function readOfficeDeckBuffer() {
+      return new Promise((resolve, reject) => {
+        Office.context.document.getFileAsync(Office.FileType.Compressed, { sliceSize: 65536 }, (res) => {
+          if (res.status !== Office.AsyncResultStatus.Succeeded) {
+            return reject(new Error(res.error ? res.error.message : 'Could not read presentation'));
+          }
+          const file = res.value;
+          const total = file.sliceCount;
+          const chunks = new Array(total);
+          let got = 0;
+
+          const readSlice = (idx) => {
+            file.getSliceAsync(idx, (sr) => {
+              if (sr.status !== Office.AsyncResultStatus.Succeeded) {
+                file.closeAsync();
+                return reject(new Error(sr.error ? sr.error.message : `Slice ${idx} failed`));
+              }
+              chunks[idx] = new Uint8Array(sr.value.data);
+              got++;
+              if (got === total) {
+                file.closeAsync();
+                const size = chunks.reduce((a, b) => a + b.byteLength, 0);
+                const out = new Uint8Array(size);
+                let off = 0;
+                for (const c of chunks) { out.set(c, off); off += c.byteLength; }
+                resolve(out.buffer);
+              } else {
+                readSlice(idx + 1);
+              }
+            });
+          };
+          if (total === 0) {
+            file.closeAsync();
+            return reject(new Error('Presentation is empty'));
+          }
+          readSlice(0);
+        });
+      });
+    }
+
+    async function launchWithBuffer(buffer, name, slide = 1) {
+      pendingPayload = { type: 'linkpresent-deck', buffer, name, slide };
+      const win = openStageWindow();
+      if (!win) {
+        presentBtn.disabled = false;
+        return setStatus('Pop-up blocked — allow pop-ups for LinkPresent and try again.');
+      }
+      sendToStage(pendingPayload);
+      let tries = 0;
+      const timer = setInterval(() => {
+        if (!pendingPayload || ++tries > 24 || (stageWin && stageWin.closed)) {
+          clearInterval(timer);
+          if (pendingPayload) {
+            presentBtn.disabled = false;
+            setStatus('Stage opened — if blank, click Present again.');
+          }
+          return;
+        }
+        sendToStage(pendingPayload);
+      }, 250);
+    }
+
+    function wireSlideSync() {
+      if (syncWired || !hasDoc || !window.Office) return;
+      syncWired = true;
+      try {
+        Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, async () => {
+          if (!$('syncOpt').checked || !stageWin || stageWin.closed) return;
+          const slide = await getCurrentSlideIndex();
+          sendToStage({ type: 'linkpresent-slide', slide });
+        });
+      } catch (_) {}
+    }
+
+    async function presentFromPowerPoint() {
+      presentBtn.disabled = true;
+      if (!hasDoc) {
+        openStageWindow();
+        presentBtn.disabled = false;
+        setStatus('Opened LinkPresent stage (preview mode).', true);
+        return;
+      }
+      setStatus('Reading active PowerPoint deck…');
+      try {
+        const [buffer, slide] = await Promise.all([readOfficeDeckBuffer(), getCurrentSlideIndex()]);
+        const rawUrl = (Office.context.document.url || '').split(/[\\/]/).pop();
+        const name = rawUrl && /\.pptx$/i.test(rawUrl) ? rawUrl : 'PowerPoint Deck.pptx';
+        setStatus('Opening LinkPresent stage…');
+        wireSlideSync();
+        await launchWithBuffer(buffer, name, slide);
+      } catch (e) {
+        presentBtn.disabled = false;
+        setStatus(e && e.message ? e.message : 'Failed to read PowerPoint file');
+      }
+    }
+
+    $('presentBtn').onclick = presentFromPowerPoint;
+    $('pickBtn').onclick = () => $('fileInput').click();
+    $('fileInput').onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      presentBtn.disabled = true;
+      setStatus(`Unpacking ${f.name}…`);
+      await launchWithBuffer(await f.arrayBuffer(), f.name, 1);
+    };
+
+    function initOffice() {
+      if (window.Office && typeof Office.onReady === 'function') {
+        Office.onReady((info) => {
+          officeReady = true;
+          hasDoc = !!(Office.context && Office.context.document && Office.context.document.getFileAsync);
+          badgeEl.textContent = hasDoc ? 'POWERPOINT CONNECTED' : 'BROWSER PREVIEW';
+          badgeEl.classList.toggle('off', !hasDoc);
+          if (hasDoc) setStatus('Ready — click Present to launch 3D stage.', true);
+          else setStatus('Preview mode (open inside PowerPoint to auto-grab active deck).');
+        });
+      }
+      // Fallback if office.js CDN is unreachable offline
+      setTimeout(() => {
+        if (officeReady) return;
+        badgeEl.textContent = 'STANDALONE PREVIEW';
+        setStatus('Preview mode — load any .pptx or open stage directly.');
+      }, 1500);
+    }
+
+    window.__officeTaskpane = { launchWithBuffer, onStageMessage, get stageWin() { return stageWin; } };
+    initOffice();
+  </script>
+</body>
+</html>

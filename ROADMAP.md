@@ -27,9 +27,9 @@ Open work, in order. Update this file as things land; `CLAUDE.md` holds only wha
    - Pending real-webcam 7-take session (`peace-next`, `peace-back`, `point-apart`, `grab`, `tap`, `point`, `rest`) via `/linkpresent?record=1`.
    - Adaptive tracking stride when `TRACK.ms > TRACK_SLOW_MS` (keeps 3D slides smooth at 60 fps during Teams/Zoom calls) + non-blocking Ready Check on camera start.
 2. **Phase 2 — Pure-browser `.pptx` parser & zero-backend hosting (`js/pptx-parse.js`):**
-   - Port `pptx_deck.py` to a zero-dependency ES module using native `DecompressionStream` + `DOMParser` so decks and camera frames stay 100% on-device with no Python server required.
-3. **Phase 3 — Microsoft PowerPoint Office Add-in (`Office.js`):**
-   - Ribbon launcher that grabs the open presentation (`getFileAsync(Compressed)`) and opens/syncs the LinkPresent stage.
+   - Done (parser): `js/pptx-parse.js` ports `pptx_deck.py` to native `DecompressionStream` + `DOMParser` with exact parity across all 6 sample decks (53 slides). Next: static HTTPS deployment.
+3. **Phase 3 — Microsoft PowerPoint Office Add-in (`office/`):**
+   - Done (scaffold & launcher): `office/manifest.xml`, `office/taskpane.html`, icons, and `BroadcastChannel` / `postMessage` handshake + live slide sync. Needs: HTTPS sideload test inside PowerPoint Desktop/Web.
 4. **Phase 4 — Zoom App & Microsoft Teams Meeting App (Share-to-Stage):**
    - Presenter sidebar + clean stage view (`?clean=1`) natively inside Zoom and Teams without OBS.
 5. **Phase 5 — Built-in virtual camera desktop wrapper:**
