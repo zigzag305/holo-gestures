@@ -785,14 +785,16 @@ async function startCamera(){
   camStarting = true; statusEl.textContent = 'loading hand tracking…';
   try {
     if (!landmarker){
-      const lh = await loadHandLandmarker(); landmarker = lh.landmarker; TRACK.delegate = lh.delegate || null;
+      const lh = await loadHandLandmarker(() => {}, Q.get('delegate')); landmarker = lh.landmarker; TRACK.delegate = lh.delegate || null;
     }
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    // 640x360 uploads 4x fewer pixels to WebGL than 720p (MediaPipe downscales to 256x256 anyway) and stays sharp in the 300px self-view tile; ?cam=720 requests 1280x720
+    const hi = Q.get('cam') === '720';
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: hi ? 1280 : 640 }, height: { ideal: hi ? 720 : 360 } } });
   } catch (e){
     camStarting = false;
     const n = e && e.name;
     statusEl.textContent = n === 'NotAllowedError' ? 'camera blocked · allow it in the address bar, then HANDS ON'
-      : n === 'NotFoundError' ? 'no camera found · keys + mouse still work' : n === 'NotReadableError' ? 'camera busy in another app (Teams?) · see README'
+      : n === 'NotFoundError' ? 'no camera found · keys + mouse still work (press S for demo)' : n === 'NotReadableError' ? 'camera busy in another app (Teams?) · see README'
       : 'hand tracking unavailable · keys + mouse still work';
     $('camBtn').classList.add('off'); return;
   }
@@ -1254,9 +1256,15 @@ async function replay(name){
 /* ============================================================================
    MAIN LOOP, KEYS, MOUSE, DECK LOADING
    ========================================================================== */
+let simOn = SIM;
+function toggleSim(){
+  simOn = !simOn; SIMQ = null;
+  if (simOn){ if (camOn) stopCamera(); updateMap(0, 0); $('camBtn').classList.add('off'); $('camBtn').textContent = 'SIM'; statusEl.textContent = 'SIM · synthetic hands'; toast('SIM DEMO ON · press S to stop'); }
+  else { for (let i = 0; i < 2; i++) dropHand(i); $('camBtn').textContent = 'HANDS OFF'; statusEl.textContent = 'sim stopped · keys + mouse'; toast('SIM DEMO OFF'); }
+}
 function loop(now){
   try {
-    if (SIM) simTick(now);
+    if (simOn) simTick(now);
     else if (!PROBE && !REPLAY) reapStale();
     frame(now); drawHud(now);
   } catch (e){ if (!window.__loopErr){ window.__loopErr = String(e && e.message || e); console.error(e); } }
@@ -1265,7 +1273,7 @@ function loop(now){
 const KEYS = {
   ArrowRight: () => nav(1), PageDown: () => nav(1), ' ': () => nav(1), ArrowLeft: () => nav(-1), PageUp: () => nav(-1),
   Home: () => showSlide(0, -1), End: () => DECK && showSlide(DECK.slides.length - 1, 1),
-  e: () => { V.eT = V.eT > .5 ? 0 : 1; if (V.focus) unfocus(); }, r: resetSlide,
+  e: () => { V.eT = V.eT > .5 ? 0 : 1; if (V.focus) unfocus(); }, r: resetSlide, s: toggleSim,
   o: () => toggleClean(), n: () => toggleNotes(), f: () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(),
   c: () => { VIEW.cam++; saveView(); applyView(); toast(`CAMERA ${Math.round(CAM_LEVELS[VIEW.cam % 4] * 100)}%`); },
   g: () => { VIEW.glass++; saveView(); applyView(); toast(`GLASS ${Math.round(GLASS_LEVELS[VIEW.glass % 4] * 100)}%`); },

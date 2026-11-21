@@ -2,7 +2,7 @@
 """HOLO — hand-gesture control deck (Jarvis V7 prototype). Stdlib only, port 4890.
 
 Serves the deck page + the note cards it manipulates. Hand tracking is Google
-MediaPipe (Apache-2.0) loaded from CDN in the page; every gesture on top is ours,
+MediaPipe (Apache-2.0) self-hosted in vendor/; every gesture on top is ours,
 written clean — no third-party gesture code. Camera frames never leave the page.
 
 Endpoints:
@@ -145,6 +145,8 @@ REC_DIR = os.path.join(ROOT, "recordings")
 # (2026-11-07: saving straight into recordings/ made every `git pull` abort once that same file was
 # committed upstream — "untracked working tree files would be overwritten". Twice.)
 REC_INBOX = os.path.join(REC_DIR, "inbox")
+for _d in (REC_INBOX, os.path.join(ROOT, "state"), os.path.join(ROOT, "decks")):
+    os.makedirs(_d, exist_ok=True)
 MAX_RECORDING = 40 * 1024 * 1024
 REC_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 

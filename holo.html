@@ -163,7 +163,7 @@
    Same engine drives real camera, ?sim=1 choreography, and the ?probe=1
    battery — amplified reach applies ONLY to real-camera input.
    ========================================================================== */
-import { dist, PINCH_IN, PINCH_OUT, PINCH_EARN, SPAN_MIN, AMP, handMetrics, oneEuro,
+import { dist, PINCH_IN, PINCH_OUT, PINCH_EARN, PINCH_LET_GO, HOLD_GRACE_MS, PINCH_FINGERS_UP, SPAN_MIN, AMP, handMetrics, oneEuro,
          assignHands as assignSlots, readDetections, loadHandLandmarker, synthHand } from '/js/hands.js';
 const Q = new URLSearchParams(location.search);
 window.__lastErr = null;
@@ -411,7 +411,7 @@ function ingestHands(rawHands){
     const st = HANDS[i]; let lm = rawHands[i];
     let m = lm ? handMetrics(lm) : null;
     if (m && m.span < SPAN_MIN) { lm = null; m = null; }   // background phantom: too tiny to be a usable hand
-    if (!lm){ if (st.present) dropHand(i); continue; }
+    if (!lm){ if (st.present && !(st.pinch && !MAP.id && now - st.upT < HOLD_GRACE_MS)) dropHand(i); continue; }
     const raw = px(m.tip);
     st.present = true; st.seen++; st.upT = now; st.lm = lm; st.m = m;
     st.smooth = oneEuro(st, raw, now);   // speed-adaptive One Euro: steady at rest, wired when fast
@@ -454,13 +454,15 @@ function ingestHands(rawHands){
       const prev = st.trail[st.trail.length - 2];
       paneEl.scrollTop -= (cur.y - prev.y) * 2.4;
     }
-    if (!st.pinch && st.seen >= 3 && m.pinch < PINCH_IN){
+    const okPinch = m.pinch < PINCH_IN && (MAP.id || m.fingersUp > PINCH_FINGERS_UP);
+    if (!st.pinch && st.seen >= 3 && okPinch){
       st.pinchN = (st.pinchN || 0) + 1;
-      if (st.pinchN >= PINCH_EARN){ st.pinch = true; st.pinchT = now;
+      if (st.pinchN >= PINCH_EARN){ st.pinch = true; st.pinchT = now; st.openN = 0;
         st.startPalm = px(m.palm); beginPinch(i, cur); } }
-    else if (!st.pinch && m.pinch >= PINCH_IN) st.pinchN = 0;
-    else if (st.pinch && m.pinch > PINCH_OUT){ releasePinch(i); }
-    else if (st.pinch){ movePinch(i, cur); }
+    else if (!st.pinch && !okPinch) st.pinchN = 0;
+    else if (st.pinch && m.pinch > PINCH_OUT){
+      if ((st.openN = (st.openN || 0) + 1) >= (MAP.id ? 1 : PINCH_LET_GO)){ st.openN = 0; releasePinch(i); } }
+    else if (st.pinch){ st.openN = 0; movePinch(i, cur); }
     // PEACE ✌ held ~8 frames = FULL RESTORE (his call: clap is camera-hostile, the
     // static peace pose is the reliable "refresh" — tidy keeps the two-palm sweep)
     if (m.peace && !st.pinch && !reader.open){

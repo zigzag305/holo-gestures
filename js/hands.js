@@ -183,7 +183,7 @@ export function readDetections(res, hands){
    extensions and offline can't kill it, the 2026-08-21 field failure); public CDN
    only as the fallback. onStage(name) reports progress. Throws an Error carrying
    .stage and .localImportError on failure. */
-export async function loadHandLandmarker(onStage = () => {}){
+export async function loadHandLandmarker(onStage = () => {}, prefDelegate = null){
   let stage = 'import', localErr = null;
   try {
     let mp = null, wasmDir = '/vendor/wasm', model = '/vendor/hand_landmarker.task';
@@ -205,9 +205,11 @@ export async function loadHandLandmarker(onStage = () => {}){
                            minHandDetectionConfidence: .6,
                            minHandPresenceConfidence: .6,
                            minTrackingConfidence: .6 });
-    try { return { landmarker: await mp.HandLandmarker.createFromOptions(files, opts('GPU')), delegate: 'GPU', localImportError: localErr }; }
-    catch (ge){ console.error('[holo] GPU delegate failed, trying CPU:', ge);
-      return { landmarker: await mp.HandLandmarker.createFromOptions(files, opts('CPU')), delegate: 'CPU', localImportError: localErr }; }
+    const first = (prefDelegate || '').toUpperCase() === 'CPU' ? 'CPU' : 'GPU';
+    const second = first === 'GPU' ? 'CPU' : 'GPU';
+    try { return { landmarker: await mp.HandLandmarker.createFromOptions(files, opts(first)), delegate: first, localImportError: localErr }; }
+    catch (ge){ console.error(`[holo] ${first} delegate failed, trying ${second}:`, ge);
+      return { landmarker: await mp.HandLandmarker.createFromOptions(files, opts(second)), delegate: second, localImportError: localErr }; }
   } catch (e){
     const err = e instanceof Error ? e : new Error(String(e));
     err.stage = stage; err.localImportError = localErr;
