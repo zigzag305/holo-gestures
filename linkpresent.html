@@ -6,14 +6,15 @@
   /* no camera (sim, blocked, or HANDS OFF): a dark studio instead of a black void */
   body { background:radial-gradient(ellipse at 50% 40%, #13202a 0%, #070b0f 70%); }
   #cam { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:1;
-         transform:scaleX(-1); opacity:1; transition:opacity .4s; }
+         transform:scaleX(-1); opacity:1; transition:opacity .4s; pointer-events:none; }
   /* SELF-VIEW (default layout): you in a tile at the bottom right, like any meeting app; the slide large.
      Hands still steer across the WHOLE screen — the tile is only what you see of yourself. */
   body.pip #cam { inset:auto; right:16px; bottom:16px; width:min(21vw, 300px); height:auto; aspect-ratio:16/9;
          border-radius:14px; border:1px solid rgba(125,255,217,.35); box-shadow:0 14px 40px rgba(0,0,0,.5); z-index:5; }
   body.pip #vignette { display:none; }
   body.pip:not(.camlive) #cam { visibility:hidden; }
-  body.pip #counter { right:calc(min(21vw, 300px) + 32px); }
+  body.pip.camlive #counter { right:calc(min(21vw, 300px) + 32px); }
+  body.pip.camlive #legend { width:min(900px, calc(100vw - min(21vw, 300px) - 52px)); }
   #vignette { position:fixed; inset:0; z-index:2; pointer-events:none;
          background:radial-gradient(ellipse at center, transparent 55%, rgba(4,6,9,.45) 100%); }
   #stage { position:fixed; inset:0; z-index:3; perspective:1700px; overflow:hidden; }
@@ -98,6 +99,7 @@
   #legend .keys { margin:8px 2px 0; font:11px/1.6 "SF Mono",ui-monospace,monospace; color:#7f968e; }
   #legend .keys b { color:#bfeee0; font-weight:600; }
   @media (max-width: 760px){ #legend .cards { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+  body:not(.nolegend) #counter { opacity:0; }
   body.nolegend #legend { opacity:0; }
   #guideChip { position:fixed; left:18px; bottom:18px; z-index:6; display:none; cursor:pointer;
         font:600 11px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.14em; color:#7dffd9;
@@ -132,6 +134,7 @@
         background:rgba(8,14,18,.9); border:1px solid rgba(125,255,217,.4); color:#e3efea;
         font:14px/1.5 -apple-system,"Segoe UI",sans-serif; box-shadow:0 20px 60px rgba(0,0,0,.5); }
   body.recording #rec { display:block; }
+  body.recording.pip.camlive #rec { left:calc((100vw - min(21vw, 300px) - 16px) / 2); width:min(640px, calc(100vw - min(21vw, 300px) - 52px)); }
   body.recording #legend, body.recording #guideChip, body.recording #counter { display:none !important; }
   #rec .k { font:600 11px/1 "SF Mono",ui-monospace,monospace; letter-spacing:.16em; color:#7dffd9; text-transform:uppercase; }
   #rec h2 { font-size:22px; margin:8px 0 4px; color:#fff; }
@@ -361,7 +364,7 @@ function focusPiece(p){
   V.focus = p; p.w.classList.add('focus'); emit('focus');
   p.fx = p.st.tx; p.fy = p.st.ty; p.fs = p.st.ts;
   const sc = Math.min(DECK.w * .84 / p.d.w, DECK.h * .8 / p.d.h, 3.4);
-  Object.assign(p.st, { tx: -p.cx - explodeOffset(p).x, ty: -p.cy - explodeOffset(p).y, ts: Math.max(1.05, sc), tz: 160 });
+  Object.assign(p.st, { tx: -p.cx, ty: -p.cy, ts: Math.max(1.05, sc), tz: 160 });
   for (const q of s.pieces) if (q !== p && !q.bg) q.st.tO = .06;
   V.eT = 0; V.yT = 0; V.pT = 0;
 }
@@ -372,7 +375,6 @@ function unfocus(){
   if (V.saved) Object.assign(V, V.saved);
   V.focus = null; V.saved = null; emit('unfocus');
 }
-function explodeOffset(p){ return { x: p.cx * .09 * V.eT, y: p.cy * .09 * V.eT + (p.rank > 1 ? 30 * V.eT : 0) }; }
 
 /* ---------- per-frame: place every layer ---------- */
 // exploded layers come forward (up to ~460px in z) and perspective enlarges them ~1.35x; the slide
@@ -459,14 +461,17 @@ function move(slot, x, y){
   }
   o.lx = x; o.ly = y;
 }
+// Tap-to-focus gate (2026-11-21): at 10–14 fps (70–90 ms/frame in recordings/hands-20261107-1043),
+// a quick 👌 tap with PINCH_EARN=2 and PINCH_LET_GO=2 spans ~280–420 ms; 320 ms / 26 px missed real taps.
+const TAP_MAX_MS = 450, TAP_MAX_PX = 45;
 function end(slot, x, y, now = performance.now()){
   const o = PT[slot]; if (!o) return; delete PT[slot];
-  const tap = now - o.t0 < 320 && o.moved < 26 && !o.noTap;
+  const tap = now - o.t0 < TAP_MAX_MS && o.moved < TAP_MAX_PX && !o.noTap;
   if (o.piece){ o.piece.w.classList.remove('held'); o.piece.st.tz = o.z0 || 0; emit('release', { moved: Math.round(o.moved) }); }
   if (tap){
     if (V.focus) unfocus();
-    else if (o.piece){ o.piece.st.tx -= 0; focusPiece(o.piece); }
-  } else if (o.piece && o.moved < 26) { /* held still: nothing */ }
+    else if (o.piece) focusPiece(o.piece);
+  } else if (o.piece && o.moved < TAP_MAX_PX) { /* held still: nothing */ }
 }
 function releaseAll(){ for (const k of Object.keys(PT)){ const o = PT[k]; if (o.piece) o.piece.w.classList.remove('held'); delete PT[k]; } TWO.active = false; }
 
@@ -967,6 +972,47 @@ async function probe(){
   ok('tap-focus', V.focus === q, q.d.name || q.d.kind);
   feed(4, () => [synthHand(.9, .85, 'open')]); feed(4, () => [synthHand(.9, .85, 'pinch')]); feed(4, () => [synthHand(.9, .85, 'open')]); clear();
   ok('tap-unfocus', V.focus === null);
+  // low-fps one-hand tap (~10 fps, ~380 ms, ~28 px drift) still focuses; a >450 ms hold does not
+  { const feedSlow = (n, dt, fn) => { for (let k = 0; k < n; k++){ T += dt; const h = fn(k / Math.max(1, n - 1)) || []; ingestHands([h[0] || null, h[1] || null], T); } };
+    feedSlow(3, 95, () => [handAtTip(qa.x, qa.y, 'open')]);
+    feedSlow(2, 95, () => [handAtTip(qa.x, qa.y, 'pinch')]);
+    feedSlow(2, 95, k => [handAtTip(qa.x + 28 * k, qa.y, 'pinch')]);
+    feedSlow(2, 95, () => [handAtTip(qa.x + 28, qa.y, 'open')]);
+    const focused = V.focus === q; clear(); if (V.focus) unfocus();
+    feedSlow(3, 95, () => [handAtTip(qa.x, qa.y, 'open')]);
+    feedSlow(2, 95, () => [handAtTip(qa.x, qa.y, 'pinch')]);
+    feedSlow(5, 110, () => [handAtTip(qa.x, qa.y, 'pinch')]);
+    feedSlow(2, 95, () => [handAtTip(qa.x, qa.y, 'open')]);
+    const heldStill = V.focus === null; clear(); if (V.focus) unfocus();
+    ok('tap-low-fps', focused && heldStill, `focused=${focused} heldStill=${heldStill}`); }
+  // focusing an off-center piece from an exploded slide must center it at (-cx, -cy), not offset by explodeOffset
+  { feed(12, () => [handAtTip(W * .5, H * .5, 'point')]);
+    feed(Math.round(900 / 16), () => [handAtTip(W * APART_X, H * .03, 'point')]); clear();
+    await wait(500);
+    const ep = SLIDES[cur].pieces.find(z => !z.bg && !z.d.locked && (Math.abs(z.cx) > 20 || Math.abs(z.cy) > 20) && pieceAt(screenOf(z).x, screenOf(z).y) === z) || q;
+    const ea = screenOf(ep);
+    feed(6, () => [handAtTip(ea.x, ea.y, 'open')]); feed(4, () => [handAtTip(ea.x, ea.y, 'pinch')]); feed(4, () => [handAtTip(ea.x, ea.y, 'open')]);
+    ok('focus-centered-after-explode', V.focus === ep && Math.abs(ep.st.tx + ep.cx) < 1 && Math.abs(ep.st.ty + ep.cy) < 1,
+       `focus=${V.focus === ep} tx=${ep.st.tx.toFixed(1)} vs ${(-ep.cx).toFixed(1)} · ty=${ep.st.ty.toFixed(1)} vs ${(-ep.cy).toFixed(1)}`);
+    clear(); if (V.focus) unfocus(); resetSlide(true); await wait(200); }
+  // bottom-right self-view tile: non-blocking, counter docks right when cam is off, legend & rec stay clear when cam is live
+  { const lay0 = VIEW.layout, hadLive = document.body.classList.contains('camlive'), hadRec = document.body.classList.contains('recording'), hadNoLeg = document.body.classList.contains('nolegend');
+    VIEW.layout = 0; applyView();
+    document.body.classList.remove('camlive', 'recording', 'nolegend');
+    const cOff = $('counter').getBoundingClientRect(), camOffVis = getComputedStyle(cam).visibility === 'hidden';
+    document.body.classList.add('camlive');
+    const cr = cam.getBoundingClientRect(), cOn = $('counter').getBoundingClientRect(), lr = $('legend').getBoundingClientRect();
+    document.body.classList.add('recording');
+    const rr = $('rec').getBoundingClientRect();
+    const pe = getComputedStyle(cam).pointerEvents === 'none';
+    if (!hadLive) document.body.classList.remove('camlive');
+    if (!hadRec) document.body.classList.remove('recording');
+    if (hadNoLeg) document.body.classList.add('nolegend');
+    VIEW.layout = lay0; applyView();
+    ok('pip-self-view-layout',
+       camOffVis && cOff.right >= W - 40 && pe && cr.width > 150 && cr.right > W - 32 && cr.bottom > H - 32
+       && cOn.right <= cr.left && lr.right <= cr.left && rr.right <= cr.left,
+       `cam=${Math.round(cr.width)}x${Math.round(cr.height)} cntOff=${Math.round(cOff.right)} cntOn=${Math.round(cOn.right)} legR=${Math.round(lr.right)} recR=${Math.round(rr.right)} camL=${Math.round(cr.left)}`); }
   // 11 point = laser
   feed(10, k => [synthHand(.4 + k * .1, .4, 'point')]);
   ok('point-laser', HANDS[0].laser.length > 3 && !HANDS[0].pinch, `${HANDS[0].laser.length} pts`); clear();
