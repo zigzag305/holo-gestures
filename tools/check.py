@@ -209,6 +209,44 @@ def check_browser(base, deck_names, all_slides):
             report("linkpresent probe battery", False, f"no result: {e}")
         loop_err = pg.evaluate("() => window.__loopErr || null")
         report("linkpresent: no page errors", not pg.errors and not loop_err, "; ".join(pg.errors[:2]) or (loop_err or ""))
+
+        print("\nClient-side .pptx parser (js/pptx-parse.js vs pptx_deck.py)")
+        import base64
+        import pptx_deck
+        decks_dir = os.path.join(ROOT, "decks")
+
+        def norm_deck(d):
+            d = json.loads(json.dumps(d))
+            for s in d.get("slides", []):
+                if "image" in s.get("bg", {}):
+                    s["bg"]["image"] = "<IMG>"
+                for q in s.get("pieces", []):
+                    if "src" in q:
+                        q["src"] = "<IMG>"
+            return d
+
+        for name in deck_names:
+            path = os.path.join(decks_dir, name)
+            py_d = norm_deck(pptx_deck.parse_deck(path))
+            b64 = base64.b64encode(open(path, "rb").read()).decode("ascii")
+            js_raw = pg.evaluate("""async ([b64, name]) => {
+              const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+              const d = await window.__holo.parsePptxBuffer(bin.buffer, name);
+              d.revokeMedia();
+              return { name: d.name, w: d.w, h: d.h, slides: d.slides };
+            }""", [b64, name])
+            js_d = norm_deck(js_raw)
+            report(f"js parity {name}", py_d == js_d, f"{len(js_d['slides'])} slides")
+
+        if deck_names:
+            b64 = base64.b64encode(open(os.path.join(decks_dir, deck_names[0]), "rb").read()).decode("ascii")
+            pg.evaluate("""([b64, name]) => {
+              const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+              new BroadcastChannel('linkpresent-deck').postMessage({ type: 'linkpresent-deck', buffer: bin.buffer, name, slide: 2 });
+            }""", [b64, deck_names[0]])
+            pg.wait_for_function("() => window.__holo.cur === 1 && window.__holo.deck", timeout=15000)
+            loaded = pg.evaluate("() => ({ cur: window.__holo.cur, slides: window.__holo.deck.slides.length })")
+            report("client-side handoff (BroadcastChannel)", loaded["cur"] == 1 and loaded["slides"] > 0, f"slide {loaded['cur'] + 1}/{loaded['slides']}")
         pg.close()
 
         print("\nScreenshots → state/check/")

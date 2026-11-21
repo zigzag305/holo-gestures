@@ -22,9 +22,18 @@ Open work, in order. Update this file as things land; `CLAUDE.md` holds only wha
    - **Automatic axis steps & paragraph `spcPct`**: `niceScale` now follows PowerPoint's `1, 2, 5 × 10^k` steps across ~8.5 intervals; `pptx_deck.py` resolves `a:spcBef/a:spcPct` and `a:spcAft/a:spcPct` and gives unstyled tables default `tx1` borders.
 3. **Commands and two focused agents.** Done: `.claude/commands/` (`verify.md`, `add-gesture.md`, `test-deck.md`) and `.claude/agents/` (`visual-review.md`, `powerpoint-fidelity.md`).
 
-## Later
-- Desktop app with a built-in virtual camera (no OBS).
-- Accounts and shared decks (database: Supabase) — only if people ask for it.
+## Product Roadmap (Approved)
+1. **Phase 1 — One-hand validation & meeting load hardening:**
+   - Pending real-webcam 7-take session (`peace-next`, `peace-back`, `point-apart`, `grab`, `tap`, `point`, `rest`) via `/linkpresent?record=1`.
+   - Adaptive tracking stride when `TRACK.ms > TRACK_SLOW_MS` (keeps 3D slides smooth at 60 fps during Teams/Zoom calls) + non-blocking Ready Check on camera start.
+2. **Phase 2 — Pure-browser `.pptx` parser & zero-backend hosting (`js/pptx-parse.js`):**
+   - Port `pptx_deck.py` to a zero-dependency ES module using native `DecompressionStream` + `DOMParser` so decks and camera frames stay 100% on-device with no Python server required.
+3. **Phase 3 — Microsoft PowerPoint Office Add-in (`Office.js`):**
+   - Ribbon launcher that grabs the open presentation (`getFileAsync(Compressed)`) and opens/syncs the LinkPresent stage.
+4. **Phase 4 — Zoom App & Microsoft Teams Meeting App (Share-to-Stage):**
+   - Presenter sidebar + clean stage view (`?clean=1`) natively inside Zoom and Teams without OBS.
+5. **Phase 5 — Built-in virtual camera desktop wrapper:**
+   - Thin Electron/Tauri wrapper exposing LinkPresent as a virtual camera for Google Meet, Webex, and locked-down orgs (plus shared company decks only if requested).
 
 ## Known gaps
 - Not yet tested on a real webcam with the new 7-take script (`peace-next`, `peace-back`, `point-apart`, `grab`, `tap`, `point`, `rest`).

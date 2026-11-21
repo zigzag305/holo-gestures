@@ -214,6 +214,7 @@ import { PINCH_IN, PINCH_OUT, PINCH_EARN, PINCH_LET_GO, HOLD_GRACE_MS, PINCH_FIN
 import { el, rgba, fillCss } from '/js/lp-dom.js';
 import { renderPiece } from '/js/lp-render.js';
 import { TAKES, FORMAT_VERSION, encodeFrame, decodeFrame, countEvents, evaluate } from '/js/recorder.js';
+import { parsePptxBuffer } from '/js/pptx-parse.js';
 const Q = new URLSearchParams(location.search);
 const SIM = Q.has('sim'), PROBE = Q.has('probe'), RENDER = Q.has('render'), RECORD = Q.has('record'), REPLAY = Q.get('replay');
 const $ = (id) => document.getElementById(id);
@@ -331,7 +332,10 @@ function showSlide(i, dir = 1, instant = false){
 function hideBuilt(i){ const s = buildSlide(i); if (i !== cur && (!trans || trans.from !== i)) s.el.style.display = 'none'; }
 /* EVENTS: what the engine did, in order. The recorder and the replay tests read these. */
 const EVENTS = [];
-function emit(type, data = {}){ EVENTS.push(Object.assign({ type, t: performance.now() }, data)); }
+function emit(type, data = {}){
+  EVENTS.push(Object.assign({ type, t: performance.now() }, data));
+  if (readyPending && (type === 'laser' || type === 'nav')) finishReadyCheck();
+}
 let lastNav = -9e9, lastNavDir = 0, returnArmed = true;
 /* RETURN-STROKE LOCK (2026-11-01, found by the recorded-hands pipeline): after a swipe, the hand
    travels back — and with reach amplification even a relaxed return crosses the swipe threshold,
@@ -783,7 +787,19 @@ function drawHud(now){
    CAMERA + MEDIAPIPE (self-hosted first, CDN fallback — same as holo.html)
    ========================================================================== */
 let landmarker = null, camOn = false, camStarting = false, lastVideoT = -1, stream = null;
-const TRACK = { delegate: null, ms: 0 };          // GPU / CPU, and the last detection's time in ms
+const TRACK = { delegate: null, ms: 0, frames: 0 };   // GPU / CPU, last detection time in ms, video frame count
+// Adaptive cadence under video-call load (2026-11-21): when MediaPipe exceeds TRACK_SLOW_MS
+// (e.g. 70-90 ms on a laptop running Teams/Zoom video), skip every other video frame so 3D
+// slide motion stays smooth instead of saturating the main thread.
+const TRACK_SLOW_MS = 60, TRACK_STRIDE_SLOW = 2;
+function shouldTrackFrame(trackMs, frameIdx){ return trackMs <= TRACK_SLOW_MS || frameIdx % TRACK_STRIDE_SLOW === 0; }
+let readyPending = false;
+function finishReadyCheck(){
+  if (!readyPending) return;
+  readyPending = false;
+  statusEl.textContent = 'hands live · ready ✓';
+  if (!document.body.classList.contains('clean')) toast('ONE-HAND CONTROLS READY ✓', 1300);
+}
 let BUILD = null; fetch('/api/version').then(r => r.json()).then(j => { BUILD = j; }).catch(() => {});
 async function startCamera(){
   if (SIM || PROBE || camOn || camStarting) return;
@@ -805,21 +821,24 @@ async function startCamera(){
   }
   cam.srcObject = stream; camOn = true; camStarting = false; document.body.classList.add('camlive');
   $('camBtn').classList.remove('off'); $('camBtn').textContent = 'HANDS ON';
-  statusEl.textContent = 'hands live · on-device';
+  readyPending = !RECORD && !SIM && !PROBE && !REPLAY && !RENDER;
+  statusEl.textContent = readyPending ? 'ready check · point ☝ or show ✌' : 'hands live · on-device';
   const tick = () => {
     if (!camOn) return;
     if (cam.currentTime !== lastVideoT && cam.videoWidth){
       lastVideoT = cam.currentTime;
-      const now = performance.now();
-      const res = landmarker.detectForVideo(cam, now); TRACK.ms = performance.now() - now;   // how long tracking took (recordings keep it)
-      onDetections(res, cam.videoWidth, cam.videoHeight, now);
+      if (shouldTrackFrame(TRACK.ms, TRACK.frames++)){
+        const now = performance.now();
+        const res = landmarker.detectForVideo(cam, now); TRACK.ms = performance.now() - now;   // how long tracking took (recordings keep it)
+        onDetections(res, cam.videoWidth, cam.videoHeight, now);
+      }
     }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
 function stopCamera(){
-  camOn = false; document.body.classList.remove('camlive'); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; cam.srcObject = null;
+  camOn = false; readyPending = false; document.body.classList.remove('camlive'); if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; cam.srcObject = null;
   for (let i = 0; i < 2; i++) dropHand(i);
   $('camBtn').classList.add('off'); $('camBtn').textContent = 'HANDS OFF'; statusEl.textContent = 'hands off · keys + mouse';
 }
@@ -1129,6 +1148,17 @@ async function probe(){
   // 16 charts carry real data
   const charts = DECK.slides.flatMap(s => s.pieces.filter(z => z.kind === 'chart'));
   ok('charts-have-data', charts.length && charts.every(c => c.chart.series[0].vals.some(v => v != null)), `${charts.length} charts`);
+  // 17 adaptive tracking cadence skips alternate frames only when tracking exceeds TRACK_SLOW_MS
+  { const fast = [0, 1, 2, 3].map(i => shouldTrackFrame(30, i));
+    const slow = [0, 1, 2, 3].map(i => shouldTrackFrame(TRACK_SLOW_MS + 15, i));
+    ok('adaptive-track-cadence', fast.every(Boolean) && slow.join() === 'true,false,true,false', `fast=${fast.join()} slow=${slow.join()}`); }
+  // 18 ready check completes once a laser or nav gesture fires
+  { const st0 = statusEl.textContent;
+    readyPending = true;
+    feed(8, () => [synthHand(.5, .5, 'point')]);
+    const done = readyPending === false && statusEl.textContent.includes('ready');
+    readyPending = false; statusEl.textContent = st0; clear();
+    ok('ready-check', done, statusEl.textContent); }
   const pass = R.filter(r => r.pass).length;
   window.__probe = { pass, total: R.length, results: R };
   statusEl.textContent = `linkpresent probe ${pass}/${R.length}`;
@@ -1357,27 +1387,56 @@ async function refreshDeckList(select){
   if (select) sel.value = select;
   return list;
 }
+function applyDeckData(data, slide = 1){
+  if (DECK && DECK.revokeMedia) DECK.revokeMedia();
+  for (const s of Object.values(SLIDES)) s.el.remove();
+  SLIDES = {}; DECK = data; DECK_NAME = data.name; cur = 0; trans = null;
+  $('empty').style.display = DECK.slides.length ? 'none' : 'flex';
+  if ($('deckSel').querySelector(`option[value="${CSS.escape(DECK_NAME)}"]`)) $('deckSel').value = DECK_NAME;
+  layout(); showSlide(clamp(slide - 1, 0, Math.max(0, DECK.slides.length - 1)), 1, true);
+  statusEl.textContent = camOn ? (readyPending ? 'ready check · point ☝ or show ✌' : 'hands live · ready ✓')
+    : (SIM ? 'SIM · synthetic hands' : PROBE ? 'probe running…' : 'client-side deck · on-device');
+  toast(`${DECK.name.replace(/\.pptx$/i, '')} · ${DECK.slides.length} slides`, 1500);
+}
 async function loadDeck(name, slide = 1){
   statusEl.textContent = 'unpacking deck…';
   const r = await fetch('/api/deck' + (name ? '?name=' + encodeURIComponent(name) : ''));
   const data = await r.json();
   if (!r.ok){ statusEl.textContent = data.error || 'could not load deck'; $('empty').style.display = 'flex'; return; }
-  for (const s of Object.values(SLIDES)) s.el.remove();
-  SLIDES = {}; DECK = data; DECK_NAME = data.name; cur = 0; trans = null;
-  $('empty').style.display = DECK.slides.length ? 'none' : 'flex';
-  $('deckSel').value = DECK_NAME;
-  layout(); showSlide(clamp(slide - 1, 0, DECK.slides.length - 1), 1, true);
-  statusEl.textContent = camOn ? 'hands live · on-device' : (SIM ? 'SIM · synthetic hands' : PROBE ? 'probe running…' : statusEl.textContent.replace('unpacking deck…', ''));
-  toast(`${DECK.name.replace(/\.pptx$/i, '')} · ${DECK.slides.length} slides`, 1500);
+  applyDeckData(data, slide);
 }
 async function upload(file){
   if (!file || !/\.pptx$/i.test(file.name)){ toast('ONLY .PPTX FILES', 1600); return; }
-  statusEl.textContent = `uploading ${file.name}…`;
-  const r = await fetch('/api/deck/upload?name=' + encodeURIComponent(file.name), { method: 'POST', body: file });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok){ statusEl.textContent = data.error || 'upload failed'; return; }
-  await refreshDeckList(data.name); await loadDeck(data.name);
+  statusEl.textContent = `unpacking ${file.name}…`;
+  try {
+    const r = await fetch('/api/deck/upload?name=' + encodeURIComponent(file.name), { method: 'POST', body: file });
+    if (r.ok){
+      const data = await r.json().catch(() => ({}));
+      if (data.name){ await refreshDeckList(data.name); await loadDeck(data.name); return; }
+    }
+    if (r.status >= 400 && r.status < 500 && r.status !== 404 && r.status !== 405){
+      const err = await r.json().catch(() => ({}));
+      statusEl.textContent = err.error || 'upload failed'; return;
+    }
+  } catch (_){}
+  // Static HTTPS host / Office Add-in / Teams stage: unpack 100% client-side in browser memory
+  try {
+    const data = await parsePptxBuffer(await file.arrayBuffer(), file.name);
+    const sel = $('deckSel');
+    if (!sel.querySelector(`option[value="${CSS.escape(data.name)}"]`)){
+      const o = el('option', null, sel); o.value = data.name; o.textContent = data.name.replace(/\.pptx$/i, '');
+    }
+    applyDeckData(data, 1);
+  } catch (e){ statusEl.textContent = (e && e.message) || 'could not unpack .pptx'; }
 }
+// Office Add-in / Teams / Zoom launcher handoff: accepts { type: 'linkpresent-deck', buffer, name, slide }
+async function handleDeckPayload(msg){
+  if (!msg || msg.type !== 'linkpresent-deck' || !msg.buffer) return;
+  try { applyDeckData(await parsePptxBuffer(msg.buffer, msg.name || 'presentation.pptx'), msg.slide || 1); }
+  catch (e){ statusEl.textContent = (e && e.message) || 'could not unpack .pptx'; }
+}
+try { new BroadcastChannel('linkpresent-deck').onmessage = (e) => handleDeckPayload(e.data); } catch (_){}
+addEventListener('message', (e) => { if (e.origin === location.origin) handleDeckPayload(e.data); });
 $('loadBtn').onclick = () => $('file').click();
 $('file').onchange = (e) => upload(e.target.files[0]);
 $('deckSel').onchange = (e) => loadDeck(e.target.value);
@@ -1386,6 +1445,7 @@ addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.class
 addEventListener('drop', (e) => { e.preventDefault(); document.body.classList.remove('dragging'); upload(e.dataTransfer.files[0]); });
 
 window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ return DECK; }, nav, showSlide, resetSlide,
+  parsePptxBuffer, applyDeckData,
   // test hooks: feed tracker results through the camera path; drive the recorder
   feed: (res, vw = 1280, vh = 720) => onDetections(res, vw, vh), synthImage, EVENTS,
   rec: { REC, recNext, recStart, recStop, recKeep, recSave, get phase(){ return REC.phase; } } };

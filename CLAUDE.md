@@ -17,6 +17,7 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `pptx_deck.py` | stdlib .pptx parser → slides of *pieces* (`shape`, `line`, `pic`, `table`, `chart`) in CSS px at 96 dpi. Resolves master → layout → slide inheritance, groups, theme colours, chart data, speaker notes. `python3 pptx_deck.py decks/x.pptx [--json]` |
 | `js/hands.js` | **shared hand engine**: pinch thresholds, `handMetrics`, One Euro smoothing, slot assignment, ghost-hand dedupe, MediaPipe loader, `synthHand` |
 | `js/recorder.js` | recorded-hands format, the guided takes and their expectations, event counting |
+| `js/pptx-parse.js` | zero-dependency browser `.pptx` parser (`parsePptxBuffer`), matching `pptx_deck.py` for offline / Office / Teams / Zoom use |
 | `js/lp-render.js` · `js/lp-charts.js` · `js/lp-dom.js` | LinkPresent renderer: one DOM element per piece; charts rebuilt from the file's numbers |
 | `holo.html` | HOLO page: cards, physics, 3D props, reader, Jarvis voice, its sim + probe |
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
