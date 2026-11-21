@@ -283,11 +283,21 @@ def _ppr_into(pp, out, ctx):
     if bsz is not None:
         out["buSize"] = int(bsz.get("val", "100000")) / 100000.0
     sa = pp.find("a:spcAft/a:spcPts", NS)
+    sap = pp.find("a:spcAft/a:spcPct", NS)
     if sa is not None:
         out["spaceAfter"] = round(int(sa.get("val", "0")) / 100.0 * PT_PX, 1)
+        out.pop("spaceAfterPct", None)
+    elif sap is not None:
+        out["spaceAfterPct"] = int(sap.get("val", "0")) / 100000.0
+        out.pop("spaceAfter", None)
     sb = pp.find("a:spcBef/a:spcPts", NS)
+    sbp = pp.find("a:spcBef/a:spcPct", NS)
     if sb is not None:
         out["spaceBefore"] = round(int(sb.get("val", "0")) / 100.0 * PT_PX, 1)
+        out.pop("spaceBeforePct", None)
+    elif sbp is not None:
+        out["spaceBeforePct"] = int(sbp.get("val", "0")) / 100000.0
+        out.pop("spaceBefore", None)
     ls = pp.find("a:lnSpc/a:spcPct", NS)
     if ls is not None:
         out["lineSpacing"] = int(ls.get("val", "100000")) / 100000.0
@@ -380,13 +390,19 @@ def text_of(txbody, ctx, inherit_chain, slide_no=None, body_chain=()):
     chain = list(inherit_chain) + [own_lst]
     paras = []
     has_text = False
-    for p in txbody.findall("a:p", NS):
+    for pi, p in enumerate(txbody.findall("a:p", NS)):
         ppr = p.find("a:pPr", NS)
         lvl = int(ppr.get("lvl", "0")) + 1 if ppr is not None else 1
         base = {"size": 18 * PT_PX}
         for lst in chain:
             base.update(_lvl_props(lst, lvl, ctx))
         _ppr_into(ppr, base, ctx)
+        if "spaceAfterPct" in base:
+            base["spaceAfter"] = round(base["size"] * base["spaceAfterPct"], 1)
+        if "spaceBeforePct" in base:
+            base["spaceBefore"] = round(base["size"] * base["spaceBeforePct"], 1)
+        if pi == 0:
+            base.pop("spaceBefore", None)       # PowerPoint never adds spaceBefore above the first paragraph
         para = {k: base[k] for k in PARA_KEYS if k in base}
         runs = []
         for r in p:
@@ -735,6 +751,8 @@ def parse_table(tbl, ctx, inherit):
                 # plain inserted table doesn't come out as bare grid lines
                 cell["fill"] = "#" + acc.lstrip("#") if head else (light if band and ri % 2 else lighter)
                 cell.setdefault("border", "#ffffff")
+            elif not styled:
+                cell.setdefault("border", "#" + ctx.scheme("tx1").lstrip("#"))
             tx = text_of(txb, ctx, inherit + ([_color_lst("#ffffff")] if head else [])) if txb is not None else None
             if tx is None and txb is not None:
                 tx = {"paras": []}

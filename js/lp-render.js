@@ -54,7 +54,8 @@ export function renderText(tx, host){
     if (p.empty){ d.style.height = (size * 1.2) + 'px'; continue; }
     if (p.bullet){
       const bu = el('span', 'bu', d); bu.textContent = p.bullet;
-      bu.style.cssText = runStyle(first) + `width:${Math.max(-ind, size * .9)}px;margin-left:${ind < 0 ? ind : -size * .9}px;`
+      const bw = ind < 0 ? -ind : size * .9;
+      bu.style.cssText = runStyle(first) + `width:${bw}px;margin-left:${-bw}px;`
         + (p.buColor ? `color:${rgba(p.buColor)};` : '') + (p.buSize ? `font-size:${(first.size || size) * p.buSize}px;` : '');
     }
     for (const r of p.runs){ const s = el('span', null, d); s.textContent = r.t; s.style.cssText = runStyle(r); }

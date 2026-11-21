@@ -35,15 +35,15 @@ export function fmtNum(v, code){
 }
 export const PALETTE = ['#3d7c8c', '#c2703d', '#e0a458', '#9db4bc', '#6b7a86', '#3f8f5b', '#8e5ea2', '#d1495b'];
 
-/* "nice" axis like PowerPoint's automatic scale: about 6 steps of 1, 2, 2.5 or 5 × 10^k */
+/* "nice" axis like PowerPoint's automatic scale: steps of 1, 2 or 5 × 10^k */
 export function niceScale(lo, hi, ax = {}){
   if (ax.min != null) lo = ax.min; else if (lo > 0) lo = 0;
   if (ax.max != null) hi = ax.max;
   if (!(hi > lo)) hi = lo + 1;
   let step = ax.step;
   if (!step){
-    const raw = (hi - lo) / 6, mag = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / mag;
-    step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+    const raw = (hi - lo) / 8.5, mag = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / mag;
+    step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
   }
   if (ax.min == null && lo < 0) lo = Math.floor(lo / step) * step;
   if (ax.max == null) hi = Math.ceil((hi + (hi - lo) * .05) / step - 1e-9) * step;   // ~5% headroom, then round up
@@ -108,8 +108,8 @@ export function renderChart(c, W0, H0, host){
     const g = svgEl('g', { class: 'pie' }, svg);
     const lab = lab0, outside = (lab.pos === 'outEnd' || lab.pos === 'bestFit' && lab.showCat) && c.type === 'pie';
     const cx = left + pw / 2, cy = top + ph / 2;
-    let R = Math.min(pw, ph) / 2 * .92;
-    if (outside) R = Math.min(pw / 2 - textW('Warehousing 15%', lblSize) * .55, ph / 2 - lblSize * 1.6, R);
+    // PowerPoint draws the pie filling ~83% of the plot box and wraps outside labels near the rim
+    let R = Math.min(pw, ph) / 2 * (outside ? .83 : .92);
     const r0 = c.type === 'doughnut' ? R * (c.hole || .5) : 0;
     g.style.transformOrigin = `${cx}px ${cy}px`;
     const vals = S0.vals.map(v => Math.max(0, v || 0)), tot = vals.reduce((a, b) => a + b, 0) || 1;
@@ -124,15 +124,24 @@ export function renderChart(c, W0, H0, host){
       svgEl('path', { d, fill: (S0.pointColors && S0.pointColors[i]) || PALETTE[i % PALETTE.length], stroke: 'rgba(255,255,255,.9)', 'stroke-width': 1.5 }, sg);
       const mid = (a0 + a1) / 2;
       if (lab.showVal || lab.showPercent || lab.showCat){
-        const parts2 = [lab.showCat ? S0.cats[i] : null,
+        const rr = outside ? R + lblSize * .35 : r0 > 0 ? (R + r0) / 2 : R * .64;
+        const x = cx + Math.cos(mid) * rr;
+        const maxCh = outside ? Math.max(7, Math.floor(((Math.cos(mid) >= 0 ? W0 - x : x) + 4) / (lblSize * .5))) : 999;
+        const catLines = [];
+        if (lab.showCat && S0.cats[i]){
+          for (const w of (outside ? String(S0.cats[i]).trim().split(/\s+/) : [S0.cats[i]])){
+            if (outside && w.length > maxCh + 1) catLines.push(w.slice(0, 6), w.slice(6));
+            else catLines.push(w);
+          }
+        }
+        const parts2 = [...catLines,
                         lab.showPercent ? fmtNum(v / tot, /%/.test(lab.fmt || S0.fmt || '') ? (lab.fmt || S0.fmt) : '0%') : null,
                         lab.showVal ? fmtNum(v, S0.fmt) : null].filter(Boolean);
-        const rr = outside ? R + lblSize * .7 : r0 > 0 ? (R + r0) / 2 : R * .64;
-        const x = cx + Math.cos(mid) * rr, y = cy + Math.sin(mid) * rr;
+        const y = cy + Math.sin(mid) * (rr + (outside ? Math.abs(Math.sin(mid)) * (parts2.length - 1) * lblSize * .45 : 0));
         const t = svgEl('text', { x, y, 'text-anchor': outside ? (Math.cos(mid) >= 0 ? 'start' : 'end') : 'middle', 'dominant-baseline': 'central',
           style: `font-size:${lblSize}px;fill:${ls.color ? rgba(ls.color) : outside ? rgba(baseColor) : '#fff'};font-weight:${ls.b ? 700 : outside ? 400 : 600};${fontCss}` });
-        if (outside && parts2.length > 1){            // category on one line, value under it
-          parts2.forEach((s, k) => svgEl('tspan', { x, dy: k ? lblSize * 1.15 : -lblSize * .55 * (parts2.length - 1) }, t).textContent = s);
+        if (outside && parts2.length > 1){            // category lines, value under them
+          parts2.forEach((s, k) => svgEl('tspan', { x, dy: k ? lblSize * 1.1 : -lblSize * .52 * (parts2.length - 1) }, t).textContent = s);
         } else t.textContent = parts2.join(' · ');
         if (v / tot > .035) sg.appendChild(t);
       }
@@ -161,9 +170,11 @@ export function renderChart(c, W0, H0, host){
     return out.length ? [Math.min(...out), Math.max(...out)] : [0, 1];
   };
   const [p0, p1] = pct ? [0, 1] : extent(prim);
-  let sc = niceScale(p0, p1, pct ? { min: 0, max: 1, step: .25, ...valAx } : valAx);
-  const anyVal = series.some(s => (Object.assign({}, lab0, s.labels || {})).showVal);
-  if (valAx.hidden && anyVal && valAx.max == null) sc.hi = Math.max(sc.hi, p1 * 1.12);   // room for the labels
+  const full100 = stacked && !pct && p0 >= 0 && Math.abs(p1 - 100) < 1e-6;
+  let sc = niceScale(p0, p1, pct ? { min: 0, max: 1, step: .25, ...valAx } : full100 ? { min: 0, max: 100, ...valAx } : valAx);
+  const outVal = !stacked && series.some(s => { const sl = Object.assign({}, lab0, s.labels || {});
+    return sl.showVal && !['ctr', 'inEnd', 'inBase'].includes(sl.pos); });
+  if (valAx.hidden && outVal && valAx.max == null) sc.hi = Math.max(sc.hi, p1 * 1.12);   // room for outside labels
   const sc2 = sec.length ? (() => { const [a, b] = extent(sec); return niceScale(a, b, valAx2 || {}); })() : null;
   let xs = null;
   if (scatter){
@@ -171,7 +182,7 @@ export function renderChart(c, W0, H0, host){
     xs = niceScale(Math.min(...all), Math.max(...all), catAx);
   }
   const vS = axStyle(valAx), cS = axStyle(catAx), v2S = valAx2 ? axStyle(valAx2) : vS;
-  const valFmt = valAx.fmt || (pct ? '0%' : null) || (prim[0] && prim[0].fmt) || null;
+  const valFmt = valAx.fmt || (pct ? '0%' : null);
   const tickLabels = valAx.hidden || valAx.noLabels ? [] : ticksOf(sc).map(v => fmtNum(v, valFmt));
   const tick2Labels = sc2 && !(valAx2.hidden || valAx2.noLabels) ? ticksOf(sc2).map(v => fmtNum(v, valAx2.fmt || sec[0].fmt)) : [];
   const catLabels = catAx.hidden || catAx.noLabels ? [] : scatter ? ticksOf(xs).map(v => fmtNum(v, catAx.fmt)) : cats.map(String);

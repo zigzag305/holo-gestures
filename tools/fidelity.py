@@ -195,8 +195,9 @@ def write_report(rows, threshold):
     for r in sorted(rows, key=lambda r: r[2]):
         deck, n, sc, ref, lp, diff, title = r
         cls = "bad" if sc < threshold else "ok"
+        src = "PowerPoint PDF" if reference_pdf(os.path.join(ROOT, "decks", deck)) else "LibreOffice"
         body.append(f"<section><h2><span class='{cls}'>{sc:.0%}</span> {html.escape(deck)} · slide {n} · {html.escape(title or '')}</h2>"
-                    f"<div class='row'><figure><img src='{rel(ref)}'><figcaption>Reference (LibreOffice)</figcaption></figure>"
+                    f"<div class='row'><figure><img src='{rel(ref)}'><figcaption>Reference ({src})</figcaption></figure>"
                     f"<figure><img src='{rel(lp)}'><figcaption>LinkPresent</figcaption></figure>"
                     f"<figure><img src='{rel(diff)}'><figcaption>Differences in red</figcaption></figure></div></section>")
     page = f"""<!doctype html><meta charset="utf-8"><title>LinkPresent fidelity</title>
@@ -206,7 +207,7 @@ section{{background:#fff;border:1px solid #d5dde1;border-radius:8px;padding:12px
 .row{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}}figure{{margin:0}}img{{width:100%;border:1px solid #d5dde1}}
 figcaption{{font-size:12px;color:#5f6b72}}.bad,.ok{{display:inline-block;min-width:46px;padding:2px 8px;border-radius:99px;color:#fff;text-align:center}}
 .bad{{background:#b23a3a}}.ok{{background:#3f8f5b}}</style>
-<h1>LinkPresent fidelity</h1><p>Share of pixels that match a LibreOffice reference after shrinking to {SCORE_W}px and softening.
+<h1>LinkPresent fidelity</h1><p>Share of pixels that match the reference (PowerPoint PDF in decks/pdf/, else LibreOffice) after shrinking to {SCORE_W}px and softening.
 Threshold {threshold:.0%}. Worst slides first. Generated {time.strftime('%Y-%m-%d %H:%M')}.</p>{''.join(body)}"""
     open(os.path.join(OUT, "report.html"), "w").write(page)
 
