@@ -553,8 +553,15 @@ function ptrPx(p){
    in 100% of 165 frames, labelled his right hand every time (372/372 across two sessions); outside the
    peace takes a ✌ never lasted more than 4 frames. The most reliable pose he has, so it does the most
    frequent job. (It used to reset the slide: that is the R key now, and rebuilding with ✦.) */
-const PEACE_FRAMES = 8, PEACE_GAP_MS = 400;
-const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pointT: null, dwell: null, peaceT: -9e9, peaceDone: false, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
+/* DROPPING ✌ (2026-11-21, recordings/hands-20261121-2358): to turn the next page he dropped his ✌ into a
+   quick fist — 3 frames (270 ms) in peace-back, 5 frames (360 ms between the fist frames, 405 ms between
+   ✌ frames) in peace-next — and showed it again. Both were shorter than PEACE_GAP_MS, so the second ✌ did
+   nothing; he then held it, waiting (9.7 s in peace-back: the "long holds" of two sessions were waiting for
+   a page that never came). A hand SEEN in another pose for PEACE_DROP_FRAMES frames in a row is a drop.
+   A tracker flicker is 1–2 frames (the peace-pages probe flickers 2 frames mid-hold: still one page);
+   in the 12 s hold of hands-20261107-1043 the ✌ never broke at all. */
+const PEACE_FRAMES = 8, PEACE_GAP_MS = 400, PEACE_DROP_FRAMES = 3;
+const mkHand = () => ({ present: false, seen: 0, hand: null, votes: { L: 0, R: 0 }, openT: -9e9, pointT: null, dwell: null, peaceT: -9e9, peaceDone: false, peaceOff: 0, pinch: false, pinchN: 0, openN: 0, peaceN: 0, pointN: 0, swipe: [], trail: [], laser: [],
                        oe: null, cur: null, m: null, hover: null, upT: 0, _pp: null, pp: null, movingT: null });
 const HANDS = [mkHand(), mkHand()];
 const assignHands = (lms) => assignSlots(lms, HANDS, px);   // identity-stable slots (camera path only)
@@ -625,16 +632,18 @@ function ingestHands(raw, now = performance.now()){
       }
     } else st.swipe.length = 0;
     // PEACE ✌ = NEXT slide with the right hand, PREVIOUS with the left — one per showing: drop it for
-    // PEACE_GAP_MS to show it again (a long hold, or a flickering one, turns one page)
+    // PEACE_GAP_MS, or show another pose for PEACE_DROP_FRAMES, to show it again (a long hold, or a
+    // flickering one, turns one page)
     if (m.peace && !st.pinch){
-      st.peaceT = now;
+      st.peaceT = now; st.peaceOff = 0;
       if (++st.peaceN >= PEACE_FRAMES && !st.peaceDone){
         st.peaceDone = true; lastPeace = now;
         const side = st.hand || (palm.x > W / 2 ? 'R' : 'L');
         if (V.focus) unfocus();
         nav(side === 'L' ? -1 : 1, now);
       }
-    } else { st.peaceN = 0; if (st.peaceDone && now - st.peaceT > PEACE_GAP_MS) st.peaceDone = false; }
+    } else { st.peaceN = 0; st.peaceOff++;
+      if (st.peaceDone && (now - st.peaceT > PEACE_GAP_MS || st.peaceOff >= PEACE_DROP_FRAMES)) st.peaceDone = false; }
     // POINT = laser pointer for the audience
     if (m.point && !st.pinch){ st.pointN++; st.pointT = now; if (st.pointN === 4) emit('laser'); if (st.pointN >= 4){ st.laser.push({ x: cur.x, y: cur.y, t: now }); } }
     else st.pointN = 0;
@@ -956,6 +965,12 @@ async function probe(){
     feed(12, () => [synthHand(.3, .55, 'peace')]); const back = cur; clear();          // left side = left hand → back
     ok('peace-pages', one === b0 + 1 && still === one && short === one && back === b0,
        `${b0} → right ✌ ${one} → flicker ${still} → glimpse ${short} → left ✌ ${back}`); }
+  // …and a QUICK drop into a fist (PEACE_DROP_FRAMES, at 18 fps ~55 ms apart: well under PEACE_GAP_MS)
+  // shows it again: two pages (hands-20261121-2358, peace-next / peace-back)
+  { const b0 = cur; T += 2000;
+    const feedAt = (n, dt, pose) => { for (let k = 0; k < n; k++){ T += dt; ingestHands([synthHand(.7, .55, pose), null], T); } };
+    feedAt(10, 55, 'peace'); feedAt(PEACE_DROP_FRAMES, 55, 'fist'); feedAt(10, 55, 'peace'); const two = cur; clear();
+    ok('peace-quick-drop', two === b0 + 2, `${b0} → ✌ · fist ×${PEACE_DROP_FRAMES} · ✌ → ${two}`); showSlide(b0, -1, true); }
   // …the tracker's hand label decides, not where the hand is: a RIGHT hand showing ✌ left of centre is next
   { const b0 = cur; T += 2000;
     for (let k = 0; k < 12; k++){ T += 33; onDetections({ landmarks: [synthImage(1 - .3, .55, 'peace').map(q => ({ x: q.x, y: q.y }))],
