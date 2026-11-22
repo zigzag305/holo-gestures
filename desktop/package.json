@@ -1,0 +1,55 @@
+{
+  "name": "linkpresent-desktop",
+  "productName": "LinkPresent",
+  "version": "1.0.0",
+  "description": "Offline desktop wrapper for LinkPresent with built-in Virtual Camera output for Google Meet, Zoom, Teams, and Webex.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:clean": "electron . --clean --vcam",
+    "test:server": "node -e \"import('./server.js').then(m => m.selfTest())\"",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:win": "electron-builder --win msi nsis"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.linkpresent.desktop",
+    "productName": "LinkPresent",
+    "copyright": "LinkPresent",
+    "files": [
+      "main.js",
+      "preload.js",
+      "server.js",
+      "vcam.js",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "../linkpresent.html", "to": "app/linkpresent.html" },
+      { "from": "../holo.html", "to": "app/holo.html" },
+      { "from": "../js", "to": "app/js" },
+      { "from": "../vendor", "to": "app/vendor" },
+      { "from": "../office", "to": "app/office" },
+      { "from": "../meeting", "to": "app/meeting" },
+      { "from": "../decks", "to": "app/decks", "filter": ["*.pptx"] }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"],
+      "hardenedRuntime": true,
+      "extendInfo": {
+        "NSCameraUsageDescription": "LinkPresent tracks hand gestures locally on-device to control your slides."
+      }
+    },
+    "win": {
+      "target": ["msi", "nsis"]
+    },
+    "msi": {
+      "oneClick": true,
+      "perMachine": true
+    }
+  }
+}

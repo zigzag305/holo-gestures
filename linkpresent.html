@@ -328,6 +328,7 @@ function showSlide(i, dir = 1, instant = false){
   $('counter').textContent = `${i + 1} / ${DECK.slides.length}${sd.title ? ' · ' + sd.title : ''}`;
   $('notes').querySelector('span').textContent = sd.notes || '(no speaker notes on this slide)';
   try { history.replaceState(null, '', `?${new URLSearchParams(Object.assign(Object.fromEntries(Q), { deck: DECK_NAME, slide: i + 1 }))}`); } catch (_){}
+  notifyLauncher({ type: 'linkpresent-state', slide: i + 1, slides: DECK.slides.length, exploded: V.eT > .5 });
 }
 function hideBuilt(i){ const s = buildSlide(i); if (i !== cur && (!trans || trans.from !== i)) s.el.style.display = 'none'; }
 /* EVENTS: what the engine did, in order. The recorder and the replay tests read these. */
@@ -335,6 +336,9 @@ const EVENTS = [];
 function emit(type, data = {}){
   EVENTS.push(Object.assign({ type, t: performance.now() }, data));
   if (readyPending && (type === 'laser' || type === 'nav')) finishReadyCheck();
+  if ((type === 'explode' || type === 'rebuild' || type === 'reset') && DECK){
+    notifyLauncher({ type: 'linkpresent-state', slide: cur + 1, slides: DECK.slides.length, exploded: type === 'explode' });
+  }
 }
 let lastNav = -9e9, lastNavDir = 0, returnArmed = true;
 /* RETURN-STROKE LOCK (2026-11-01, found by the recorded-hands pipeline): after a swipe, the hand
@@ -1416,6 +1420,14 @@ function applyDeckData(data, slide = 1){
 async function loadDeck(name, slide = 1){
   statusEl.textContent = 'unpacking deck…';
   const r = await fetch('/api/deck' + (name ? '?name=' + encodeURIComponent(name) : ''));
+  if (r.status === 404 && name){
+    const raw = await fetch('/api/deck/raw?name=' + encodeURIComponent(name));
+    if (raw.ok){
+      const data = await parsePptxBuffer(await raw.arrayBuffer(), name);
+      applyDeckData(data, slide);
+      return;
+    }
+  }
   const data = await r.json();
   if (!r.ok){ statusEl.textContent = data.error || 'could not load deck'; $('empty').style.display = 'flex'; return; }
   applyDeckData(data, slide);
@@ -1444,10 +1456,10 @@ async function upload(file){
     applyDeckData(data, 1);
   } catch (e){ statusEl.textContent = (e && e.message) || 'could not unpack .pptx'; }
 }
-// Office Add-in / Teams / Zoom launcher handoff: accepts deck buffer or slide-sync commands
-let deckChan = null;
+// Office Add-in / Teams / Zoom launcher handoff: accepts deck buffer, slide-sync, or stage commands
+var deckChan = null;
 function notifyLauncher(msg){
-  if (deckChan){ try { deckChan.postMessage(msg); } catch (_){} }
+  if (deckChan){ try { deckChan.postMessage(msg); return; } catch (_){} }
   if (window.opener && !window.opener.closed){ try { window.opener.postMessage(msg, location.origin); } catch (_){} }
 }
 async function handleDeckPayload(msg){
@@ -1455,6 +1467,19 @@ async function handleDeckPayload(msg){
   if (msg.type === 'linkpresent-slide' && DECK && msg.slide){
     if (V.focus) unfocus();
     showSlide(clamp(msg.slide - 1, 0, Math.max(0, DECK.slides.length - 1)), 1, true);
+    return;
+  }
+  if (msg.type === 'linkpresent-command'){
+    if (msg.action === 'toggle-apart' && DECK){
+      if (V.focus) unfocus();
+      const wantOut = typeof msg.value === 'boolean' ? msg.value : !(EX.out || V.eT > .5);
+      if (!wantOut){ resetSlide(true); V.eT = 0; EX.out = false; emit('rebuild'); toast('REBUILT · everything back in place'); }
+      else { V.eT = 1; EX.out = true; emit('explode'); toast('PULLED APART'); }
+    } else if (msg.action === 'set-clean'){
+      document.body.classList.toggle('clean', !!msg.value);
+    } else if (msg.action === 'set-pip'){
+      VIEW.pip = !!msg.value; applyView();
+    }
     return;
   }
   if (msg.type !== 'linkpresent-deck' || !msg.buffer) return;
@@ -1485,11 +1510,11 @@ window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ retur
   $('guideChip').onclick = () => document.body.classList.remove('nolegend');
   applyView();
   const want = Q.get('deck') || ((RECORD || REPLAY) ? 'velora-q3-2026-qbr.pptx' : null);
-  const fromOffice = Q.get('launcher') === 'office';
-  const list = fromOffice ? [] : await refreshDeckList(want);
-  if (fromOffice){
+  const fromLauncher = Q.get('launcher') === 'office' || Q.get('launcher') === 'desktop';
+  const list = fromLauncher ? [] : await refreshDeckList(want);
+  if (fromLauncher){
     $('empty').style.display = 'flex';
-    statusEl.textContent = 'waiting for PowerPoint deck…';
+    statusEl.textContent = Q.get('launcher') === 'desktop' ? 'waiting for desktop deck…' : 'waiting for PowerPoint deck…';
   } else if (!list.length){
     $('empty').style.display = 'flex';
     statusEl.textContent = 'no deck yet · drop a .pptx';
