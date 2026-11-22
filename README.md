@@ -196,7 +196,7 @@ and column + line combos on two axes), theme colours, hidden slides, speaker not
 SmartArt internals, embedded video, EMF/WMF pictures; table styles are approximated.
 
 Test it without a camera: `/linkpresent?sim=1` (or press **S**) plays a scripted demo with synthetic hands ·
-`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**45/45**) ·
+`/linkpresent?probe=1&deck=velora-q3-2026-qbr.pptx` runs the gesture test battery (**46/46**) ·
 `/linkpresent?clean=1` opens in meeting view · `/linkpresent?render=1` shows the bare slide, flat ·
 `/linkpresent?record=1` records your hands · `/linkpresent?replay=<name>` replays a recording.
 Parser on its own: `python3 pptx_deck.py decks/your.pptx`.
