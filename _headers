@@ -1,0 +1,22 @@
+/*
+  Permissions-Policy: camera=(self)
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/*.html
+  Cache-Control: no-store
+
+/linkpresent
+  Cache-Control: no-store
+
+/js/*
+  Cache-Control: no-cache
+
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/vendor/wasm/*.wasm
+  Content-Type: application/wasm
+
+/vendor/models/*.task
+  Content-Type: application/octet-stream

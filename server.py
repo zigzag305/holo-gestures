@@ -248,6 +248,13 @@ class H(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(500, {"error": "meeting/sidebar.html missing"})
             return self._send(200, body, "text/html; charset=utf-8")
+        if p in ("/privacy", "/privacy.html", "/terms", "/terms.html"):
+            fname = "privacy.html" if "privacy" in p else "terms.html"
+            try:
+                body = open(os.path.join(ROOT, fname), "rb").read()
+            except OSError:
+                return self._send(404, {"error": fname + " missing"})
+            return self._send(200, body, "text/html; charset=utf-8")
         if p == "/api/decks":
             return self._send(200, list_decks())
         if p == "/api/deck":

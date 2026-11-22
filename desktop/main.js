@@ -107,9 +107,19 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('desktop:vcam-start', (_, opts) => {
     if (opts && opts.device) vcam.device = opts.device;
-    return vcam.start(stageWin ? stageWin.webContents : null);
+    if (stageWin && !stageWin.isDestroyed()) {
+      stageWin.setContentSize(vcam.width, vcam.height);
+      stageWin.setResizable(false);
+    }
+    const st = vcam.start(stageWin ? stageWin.webContents : null);
+    if (!st.active && stageWin && !stageWin.isDestroyed()) stageWin.setResizable(true);
+    return st;
   });
-  ipcMain.handle('desktop:vcam-stop', () => vcam.stop());
+  ipcMain.handle('desktop:vcam-stop', () => {
+    const st = vcam.stop();
+    if (stageWin && !stageWin.isDestroyed()) stageWin.setResizable(true);
+    return st;
+  });
   ipcMain.handle('desktop:open-sidebar', () => { openSidebarWindow(); return { ok: true }; });
   ipcMain.handle('desktop:open-deck', async () => {
     const res = await dialog.showOpenDialog(stageWin || undefined, {

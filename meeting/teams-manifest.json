@@ -6,8 +6,8 @@
   "developer": {
     "name": "LinkPresent",
     "websiteUrl": "https://localhost:4890",
-    "privacyUrl": "https://localhost:4890/linkpresent",
-    "termsOfUseUrl": "https://localhost:4890/linkpresent"
+    "privacyUrl": "https://localhost:4890/privacy.html",
+    "termsOfUseUrl": "https://localhost:4890/terms.html"
   },
   "name": {
     "short": "LinkPresent",
