@@ -107,11 +107,14 @@ def start_server(port):
 def check_routes(base, deck_names):
     print("\nServer routes (server.py)")
     for path, want, ctype in (("/", 200, "text/html"), ("/linkpresent", 200, "text/html"),
+                              ("/privacy.html", 200, "text/html"), ("/terms.html", 200, "text/html"),
                               ("/office/taskpane.html", 200, "text/html"), ("/office/manifest.xml", 200, "xml"),
                               ("/office/icon-32.png", 200, "image/png"),
                               ("/meeting/sidebar.html", 200, "text/html"),
                               ("/meeting/teams-manifest.json", 200, "json"),
                               ("/meeting/zoom-app.json", 200, "json"),
+                              ("/meeting/icon-32.png", 200, "image/png"),
+                              ("/meeting/icon-192.png", 200, "image/png"),
                               ("/js/hands.js", 200, "javascript"), ("/api/tree", 200, "json"),
                               ("/api/decks", 200, "json")):
         code, body = get(base + path)
@@ -134,6 +137,18 @@ def check_routes(base, deck_names):
         report("meeting/ manifests valid (Teams + Zoom)", ok_tm and ok_zm, "meetingSidePanel + meetingStage + zoomapp:inmeeting")
     except Exception as e:  # noqa: BLE001
         report("meeting/ manifests valid (Teams + Zoom)", False, str(e))
+    try:
+        import tempfile, zipfile, package_release
+        with tempfile.TemporaryDirectory() as td:
+            out = package_release.build_release("https://app.linkpresent.example", td)
+            with zipfile.ZipFile(out["teams"]) as zf:
+                names = set(zf.namelist())
+                tm_out = json.loads(zf.read("manifest.json"))
+            ok_rel = (names == {"manifest.json", "icon-32.png", "icon-192.png"}
+                      and "https://app.linkpresent.example/privacy.html" == tm_out["developer"]["privacyUrl"])
+            report("package_release.py builds Teams zip + manifests", ok_rel, "office + zoom + linkpresent-teams.zip")
+    except Exception as e:  # noqa: BLE001
+        report("package_release.py builds Teams zip + manifests", False, str(e))
     code, body = get(base + "/api/version")
     report("GET /api/version", code == 200 and "build" in json.loads(body or b"{}"), f"{code} · {body[:60].decode(errors='replace')}")
     try:   # the gesture engine must never be served from a stale cache after an update
@@ -445,12 +460,15 @@ const { VirtualCameraBridge } = require('./desktop/vcam');
     await srv.close();
   }
   const vcam = new VirtualCameraBridge({ width: 64, height: 36, fps: 30, sink: 'null' });
+  assert.strictEqual(vcam.detectCapabilities().nativeReady, true);
   vcam.start();
   assert.strictEqual(vcam.pushFrame(Buffer.alloc(64 * 36 * 4)), true);
+  assert.strictEqual(vcam.pushFrame(Buffer.alloc(128 * 72 * 4), 128, 72), true);
   assert.strictEqual(vcam.pushFrame(Buffer.alloc(16)), false);
   const st = vcam.status();
   assert.strictEqual(st.active, true);
-  assert.strictEqual(st.frames, 1);
+  assert.strictEqual(st.frames, 2);
+  assert.strictEqual(st.rescaled, 1);
   assert.strictEqual(st.dropped, 1);
   vcam.stop();
   assert.strictEqual(vcam.status().active, false);

@@ -116,6 +116,13 @@ function startDesktopServer(rootDir, port = 0) {
         ? send(res, 200, fs.readFileSync(f), MIME['.html'])
         : send(res, 404, { error: 'meeting/sidebar.html missing' });
     }
+    if (p === '/privacy' || p === '/privacy.html' || p === '/terms' || p === '/terms.html') {
+      const fname = p.includes('privacy') ? 'privacy.html' : 'terms.html';
+      const f = path.join(rootDir, fname);
+      return fs.existsSync(f)
+        ? send(res, 200, fs.readFileSync(f), MIME['.html'])
+        : send(res, 404, { error: `${fname} missing` });
+    }
     if (p === '/api/version') {
       return send(res, 200, { build: 'desktop', branch: null, mode: 'offline-desktop' });
     }

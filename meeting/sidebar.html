@@ -407,7 +407,23 @@
           hostKind = 'teams';
           badgeEl.textContent = 'TEAMS MEETING';
           badgeEl.classList.remove('off');
-          setStatus('Teams connected — click Share Stage to present.', true);
+          const isConfig = new URLSearchParams(location.search).get('config') === '1';
+          if (isConfig && microsoftTeams.pages && microsoftTeams.pages.config) {
+            microsoftTeams.pages.config.registerOnSaveHandler((saveEvent) => {
+              const contentUrl = `${location.origin}/meeting/sidebar.html`;
+              microsoftTeams.pages.config.setConfig({
+                entityId: 'linkpresent-meeting-stage',
+                contentUrl,
+                websiteUrl: `${location.origin}/linkpresent`,
+                suggestedDisplayName: 'LinkPresent',
+              }).then(() => saveEvent.notifySuccess())
+                .catch((err) => saveEvent.notifyFailure(String(err || 'config failed')));
+            });
+            microsoftTeams.pages.config.setValidityState(true);
+            setStatus('Teams tab ready — click Save to add LinkPresent to this meeting.', true);
+          } else {
+            setStatus('Teams connected — click Share Stage to present.', true);
+          }
           return;
         } catch (_) {}
       }
