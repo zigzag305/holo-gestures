@@ -23,6 +23,7 @@ Plans and open work live in `ROADMAP.md`, not here.
 | `linkpresent.html` | LinkPresent page: deck/slide state, explode layout (`frame()`), pointer API (`begin/move/end`), gesture rules (`ingestHands`, `twoUpdate`), sim (`demoSteps`) and probe |
 | `office/` | Microsoft PowerPoint Office Add-in (`manifest.xml`, `taskpane.html`, icons, sideload guide) |
 | `meeting/` | Microsoft Teams Meeting App & Zoom App (`sidebar.html`, `teams-manifest.json`, `zoom-app.json`, Share-to-Stage guide) |
+| `desktop/` | Phase 5 offline Electron desktop wrapper + Virtual Camera bridge (`main.js`, `server.js`, `vcam.js`, `preload.js`, `.dmg`/`.msi` packaging) |
 | `tools/check.py` | every check in one command (runs `fidelity.py` too when LibreOffice + Poppler exist) |
 | `tools/fidelity.py` | slide-by-slide score vs the deck's PowerPoint PDF (`decks/pdf/`), else LibreOffice → `state/fidelity/report.html` |
 | `recordings/` | real hand sessions, replayed as tests by `check.py`; `synthetic-smoke` is simulated (`tools/make_synthetic_recording.js`). New sessions (`?record=1`) save to `recordings/inbox/` (gitignored): to make one a test, **commit it under `recordings/`** — never save into `recordings/` directly, or the user's next `git pull` collides with their own untracked copy |

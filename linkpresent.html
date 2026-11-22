@@ -1420,6 +1420,14 @@ function applyDeckData(data, slide = 1){
 async function loadDeck(name, slide = 1){
   statusEl.textContent = 'unpacking deck…';
   const r = await fetch('/api/deck' + (name ? '?name=' + encodeURIComponent(name) : ''));
+  if (r.status === 404 && name){
+    const raw = await fetch('/api/deck/raw?name=' + encodeURIComponent(name));
+    if (raw.ok){
+      const data = await parsePptxBuffer(await raw.arrayBuffer(), name);
+      applyDeckData(data, slide);
+      return;
+    }
+  }
   const data = await r.json();
   if (!r.ok){ statusEl.textContent = data.error || 'could not load deck'; $('empty').style.display = 'flex'; return; }
   applyDeckData(data, slide);
@@ -1502,11 +1510,11 @@ window.__holo = { V, HANDS, PT, TWO, get cur(){ return cur; }, get deck(){ retur
   $('guideChip').onclick = () => document.body.classList.remove('nolegend');
   applyView();
   const want = Q.get('deck') || ((RECORD || REPLAY) ? 'velora-q3-2026-qbr.pptx' : null);
-  const fromOffice = Q.get('launcher') === 'office';
-  const list = fromOffice ? [] : await refreshDeckList(want);
-  if (fromOffice){
+  const fromLauncher = Q.get('launcher') === 'office' || Q.get('launcher') === 'desktop';
+  const list = fromLauncher ? [] : await refreshDeckList(want);
+  if (fromLauncher){
     $('empty').style.display = 'flex';
-    statusEl.textContent = 'waiting for PowerPoint deck…';
+    statusEl.textContent = Q.get('launcher') === 'desktop' ? 'waiting for desktop deck…' : 'waiting for PowerPoint deck…';
   } else if (!list.length){
     $('empty').style.display = 'flex';
     statusEl.textContent = 'no deck yet · drop a .pptx';
