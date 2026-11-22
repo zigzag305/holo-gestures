@@ -1,0 +1,24 @@
+{
+  "display_information": {
+    "name": "LinkPresent",
+    "short_description": "Present PowerPoint decks with one hand and 3D layers in Zoom.",
+    "long_description": "Unpack any PowerPoint (.pptx) into interactive 3D layers over your camera inside Zoom meetings. Control slides with one hand while keeping camera frames and slide files 100% on-device."
+  },
+  "features": {
+    "products": ["zoom_meeting"],
+    "in_client_feature": {
+      "zoom_app_api": {
+        "enable": true,
+        "apis": ["shareApp", "startCollaborate", "openUrl"]
+      },
+      "guest_mode": { "enable": true },
+      "collaborate_mode": { "enable": true }
+    }
+  },
+  "oauth_information": {
+    "Home_url": "https://localhost:4890/meeting/sidebar.html",
+    "Redirect_url": "https://localhost:4890/meeting/sidebar.html",
+    "Domain_allow_list": ["localhost", "appssdk.zoom.us"]
+  },
+  "scopes": ["zoomapp:inmeeting"]
+}

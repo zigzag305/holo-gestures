@@ -1,0 +1,38 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "a7f34e10-9c42-4b5a-8e33-2c91b4a0f401",
+  "developer": {
+    "name": "LinkPresent",
+    "websiteUrl": "https://localhost:4890",
+    "privacyUrl": "https://localhost:4890/linkpresent",
+    "termsOfUseUrl": "https://localhost:4890/linkpresent"
+  },
+  "name": {
+    "short": "LinkPresent",
+    "full": "LinkPresent — One-Hand 3D Presentation Stage"
+  },
+  "description": {
+    "short": "Present PowerPoint decks with one hand and 3D layers on the meeting stage.",
+    "full": "Unpack any PowerPoint (.pptx) into interactive 3D layers over your camera inside Microsoft Teams meetings. Control slides with one hand (point, peace sign, pinch) while keeping camera frames and slide files 100% on-device."
+  },
+  "icons": {
+    "outline": "icon-32.png",
+    "color": "icon-192.png"
+  },
+  "accentColor": "#070B0F",
+  "configurableTabs": [
+    {
+      "configurationUrl": "https://localhost:4890/meeting/sidebar.html?config=1",
+      "canUpdateConfiguration": true,
+      "scopes": ["groupchat", "team"],
+      "context": ["meetingSidePanel", "meetingStage", "meetingDetailsTab"],
+      "meetingSurfaces": ["sidePanel", "stage"]
+    }
+  ],
+  "StaticTabs": [],
+  "permissions": ["identity"],
+  "devicePermissions": ["media"],
+  "validDomains": ["localhost:4890", "localhost"]
+}

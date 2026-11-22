@@ -109,6 +109,9 @@ def check_routes(base, deck_names):
     for path, want, ctype in (("/", 200, "text/html"), ("/linkpresent", 200, "text/html"),
                               ("/office/taskpane.html", 200, "text/html"), ("/office/manifest.xml", 200, "xml"),
                               ("/office/icon-32.png", 200, "image/png"),
+                              ("/meeting/sidebar.html", 200, "text/html"),
+                              ("/meeting/teams-manifest.json", 200, "json"),
+                              ("/meeting/zoom-app.json", 200, "json"),
                               ("/js/hands.js", 200, "javascript"), ("/api/tree", 200, "json"),
                               ("/api/decks", 200, "json")):
         code, body = get(base + path)
@@ -122,6 +125,15 @@ def check_routes(base, deck_names):
         report("office/manifest.xml valid", not missing, f"{len(refs)} resource refs" + (f" · missing: {missing}" if missing else ""))
     except Exception as e:  # noqa: BLE001
         report("office/manifest.xml valid", False, str(e))
+    try:
+        tm = json.load(open(os.path.join(ROOT, "meeting", "teams-manifest.json")))
+        zm = json.load(open(os.path.join(ROOT, "meeting", "zoom-app.json")))
+        ct = (tm.get("configurableTabs") or [{}])[0]
+        ok_tm = "meetingSidePanel" in (ct.get("context") or []) and "meetingStage" in (ct.get("context") or [])
+        ok_zm = "zoomapp:inmeeting" in (zm.get("scopes") or [])
+        report("meeting/ manifests valid (Teams + Zoom)", ok_tm and ok_zm, "meetingSidePanel + meetingStage + zoomapp:inmeeting")
+    except Exception as e:  # noqa: BLE001
+        report("meeting/ manifests valid (Teams + Zoom)", False, str(e))
     code, body = get(base + "/api/version")
     report("GET /api/version", code == 200 and "build" in json.loads(body or b"{}"), f"{code} · {body[:60].decode(errors='replace')}")
     try:   # the gesture engine must never be served from a stale cache after an update
@@ -133,7 +145,7 @@ def check_routes(base, deck_names):
         code, body = get(base + "/api/deck?name=" + urllib.request.quote(deck_names[0]))
         ok = code == 200 and json.loads(body).get("slides")
         report("GET /api/deck (first deck)", ok, f"{code}")
-    for path in ("/js/../server.py", "/vendor/../holo.json", "/office/../server.py", "/js/%2e%2e/server.py",
+    for path in ("/js/../server.py", "/vendor/../holo.json", "/office/../server.py", "/meeting/../server.py", "/js/%2e%2e/server.py",
                  "/api/deck/media?name=../server.py&p=ppt/x.png", "/api/deck?name=../server.py"):
         code, _ = get(base + path)
         report(f"refuses {path}", code in (400, 404), str(code))
@@ -280,6 +292,26 @@ def check_browser(base, deck_names, all_slides):
             report("office taskpane launch & slide sync", "Live on stage" in tp_status and not tp.errors, tp_status)
             stage_pg.close()
             tp.close()
+
+            mp = page()
+            mp.route("https://res.cdn.office.net/**", lambda route: route.abort())
+            mp.route("https://appssdk.zoom.us/**", lambda route: route.abort())
+            mp.goto(base + "/meeting/sidebar.html", wait_until="domcontentloaded")
+            mp.wait_for_function("() => window.__meetingSidebar && window.__meetingSidebar.deck", timeout=15000)
+            with mp.context.expect_page() as mpopup_info:
+                mp.click("#shareBtn")
+            mstage = mpopup_info.value
+            mstage.wait_for_function("() => window.__holo && window.__holo.deck", timeout=20000)
+            mp.click("#nextBtn")
+            mstage.wait_for_function("() => window.__holo.cur === 1", timeout=10000)
+            mp.click("#apartBtn")
+            mstage.wait_for_function("() => window.__holo.V.eT === 1", timeout=10000)
+            mstage.evaluate("() => window.__holo.showSlide(3, 1, true)")
+            mp.wait_for_function("() => window.__meetingSidebar.curSlide === 4", timeout=10000)
+            mp_count = mp.evaluate("() => document.getElementById('slideCount').textContent")
+            report("meeting sidebar stage share & 2-way sync", mp_count.startswith("4 /") and not mp.errors, f"slide {mp_count}")
+            mstage.close()
+            mp.close()
 
         print("\nScreenshots → state/check/")
         shots = 0

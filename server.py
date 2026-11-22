@@ -213,6 +213,7 @@ class H(BaseHTTPRequestHandler):
 
     MIME = {".mjs": "text/javascript", ".js": "text/javascript",
             ".html": "text/html; charset=utf-8", ".xml": "application/xml; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
             ".wasm": "application/wasm", ".task": "application/octet-stream",
             ".glb": "model/gltf-binary", ".png": "image/png", ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
@@ -240,6 +241,12 @@ class H(BaseHTTPRequestHandler):
                 body = open(os.path.join(ROOT, "office", "taskpane.html"), "rb").read()
             except OSError:
                 return self._send(500, {"error": "office/taskpane.html missing"})
+            return self._send(200, body, "text/html; charset=utf-8")
+        if p in ("/meeting", "/meeting/"):
+            try:
+                body = open(os.path.join(ROOT, "meeting", "sidebar.html"), "rb").read()
+            except OSError:
+                return self._send(500, {"error": "meeting/sidebar.html missing"})
             return self._send(200, body, "text/html; charset=utf-8")
         if p == "/api/decks":
             return self._send(200, list_decks())
@@ -280,10 +287,10 @@ class H(BaseHTTPRequestHandler):
             except OSError:
                 names = []
             return self._send(200, names)
-        if p.startswith(("/vendor/", "/props/", "/js/", "/office/")):
-            # self-hosted tracking libs & Office Add-in taskpane/manifest
+        if p.startswith(("/vendor/", "/props/", "/js/", "/office/", "/meeting/")):
+            # self-hosted tracking libs, Office Add-in & Teams/Zoom meeting sidebar/manifests
             safe = os.path.normpath(p.lstrip("/"))
-            if safe.replace(os.sep, "/").split("/")[0] in ("vendor", "props", "js", "office") and ".." not in safe:
+            if safe.replace(os.sep, "/").split("/")[0] in ("vendor", "props", "js", "office", "meeting") and ".." not in safe:
                 full = os.path.join(ROOT, safe)
                 if os.path.isfile(full):
                     ext = os.path.splitext(full)[1]

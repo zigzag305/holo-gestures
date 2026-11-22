@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkPresent — Meeting Sidebar (Teams &amp; Zoom)</title>
+  <script src="https://res.cdn.office.net/teams-js/2.26.0/js/MicrosoftTeams.min.js" async></script>
+  <script src="https://appssdk.zoom.us/sdk.min.js" async></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      padding: 16px 14px 22px;
+      background: radial-gradient(ellipse at 50% 0%, #13202a 0%, #070b0f 75%);
+      color: #dcebe6;
+      font: 13px/1.48 -apple-system, "Segoe UI", sans-serif;
+    }
+    .hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .brand { font: 700 11.5px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .24em; color: #eafff8; }
+    .badge {
+      font: 600 10px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em;
+      padding: 5px 9px; border-radius: 99px; color: #7dffd9;
+      background: rgba(125,255,217,.1); border: 1px solid rgba(125,255,217,.3);
+    }
+    .badge.off { color: #ffcf7d; background: rgba(255,207,125,.1); border-color: rgba(255,207,125,.35); }
+    .panel {
+      background: rgba(10,16,20,.82); border: 1px solid rgba(125,255,217,.22);
+      border-radius: 14px; padding: 13px; margin-bottom: 11px;
+    }
+    h1 { font-size: 16px; color: #fff; margin-bottom: 5px; }
+    h2 {
+      font: 600 10.5px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .16em;
+      color: #7dffd9; text-transform: uppercase; margin-bottom: 8px;
+    }
+    p.sub { color: #9fb4ab; font-size: 12px; margin-bottom: 12px; }
+    .row { display: flex; gap: 7px; margin-top: 8px; }
+    select {
+      width: 100%; border-radius: 10px; padding: 8px 10px;
+      background: #0b1318; color: #eafff8; border: 1px solid rgba(125,255,217,.28);
+      font: 500 12px/1.2 "SF Mono", ui-monospace, Menlo, monospace;
+      margin-bottom: 8px;
+    }
+    button.primary {
+      width: 100%; border: 0; border-radius: 99px; padding: 10px 14px; cursor: pointer;
+      background: #7dffd9; color: #05110d;
+      font: 700 11.5px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .12em;
+    }
+    button.primary:disabled { opacity: .55; cursor: wait; }
+    button.ghost {
+      flex: 1; width: 100%; border-radius: 99px; padding: 8px 11px; cursor: pointer;
+      background: transparent; color: #bfeee0; border: 1px solid rgba(125,255,217,.32);
+      font: 600 10.5px/1 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .09em;
+    }
+    button.ghost:hover { border-color: #7dffd9; color: #fff; }
+    label.opt {
+      display: flex; align-items: center; gap: 8px; margin-top: 9px;
+      font-size: 12px; color: #c9d6d2; cursor: pointer; user-select: none;
+    }
+    label.opt input { accent-color: #7dffd9; width: 14px; height: 14px; }
+    .status {
+      margin-top: 9px; min-height: 17px;
+      font: 500 11px/1.4 "SF Mono", ui-monospace, Menlo, monospace; color: #ffcf7d;
+    }
+    .status.ok { color: #7dffd9; }
+    .nav-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 9px;
+    }
+    .slide-count {
+      font: 700 12px/1 "SF Mono", ui-monospace, Menlo, monospace; color: #eafff8;
+      letter-spacing: .08em; min-width: 82px; text-align: center;
+    }
+    .slide-list {
+      max-height: 148px; overflow-y: auto; display: grid; gap: 5px;
+      margin-bottom: 9px; padding-right: 2px;
+    }
+    .slide-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 9px;
+      border-radius: 9px; cursor: pointer;
+      background: rgba(16,25,31,.7); border: 1px solid rgba(125,255,217,.14);
+      font-size: 12px; color: #c7dad4; text-align: left; width: 100%;
+    }
+    .slide-item.active {
+      background: rgba(125,255,217,.14); border-color: #7dffd9; color: #fff; font-weight: 600;
+    }
+    .slide-item .num {
+      font: 700 10.5px/1 "SF Mono", ui-monospace, Menlo, monospace;
+      color: #7dffd9; min-width: 22px;
+    }
+    .slide-item .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notes-box {
+      background: rgba(6,10,13,.75); border: 1px solid rgba(125,255,217,.18);
+      border-radius: 10px; padding: 9px 11px; min-height: 66px; max-height: 140px;
+      overflow-y: auto; font-size: 12px; color: #bfd2cc; white-space: pre-wrap;
+    }
+    .notes-box.empty { color: #6c837c; font-style: italic; }
+    .glist { display: grid; gap: 6px; font-size: 11.5px; color: #b7cbc4; }
+    .glist b { color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <span class="brand">LINKPRESENT</span>
+    <span class="badge off" id="hostBadge">DETECTING HOST…</span>
+  </div>
+
+  <div class="panel">
+    <h1>Meeting Stage Control</h1>
+    <p class="sub">Share the interactive 3D stage to your meeting and drive slides with one hand—zero server uploads.</p>
+
+    <select id="deckSel" aria-label="Sample or loaded presentation"></select>
+
+    <button class="primary" id="shareBtn">SHARE STAGE TO MEETING</button>
+    <div class="row">
+      <button class="ghost" id="pickBtn">LOAD .PPTX FILE</button>
+      <button class="ghost" id="apartBtn" title="Pull active slide into 3D layers or rebuild">✦ PULL APART</button>
+    </div>
+    <input type="file" id="fileInput" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+
+    <label class="opt">
+      <input type="checkbox" id="cleanOpt" checked>
+      <span>Stage Mode (clean meeting view, no top bar)</span>
+    </label>
+    <label class="opt">
+      <input type="checkbox" id="pipOpt" checked>
+      <span>Camera Mode (bottom-right self-view tile)</span>
+    </label>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Slide &amp; Speaker Notes</h2>
+    <div class="nav-bar">
+      <button class="ghost" id="prevBtn">‹ PREV</button>
+      <span class="slide-count" id="slideCount">1 / 1</span>
+      <button class="ghost" id="nextBtn">NEXT ›</button>
+    </div>
+    <div class="slide-list" id="slideList"></div>
+    <div class="notes-box empty" id="notesBox">Speaker notes for the active slide appear here.</div>
+  </div>
+
+  <div class="panel">
+    <h2>One-hand gestures</h2>
+    <div class="glist">
+      <div>☝️ <b>Point</b> — laser dot; hold on <b>› / ‹ / ✦</b> edge targets.</div>
+      <div>✌️ <b>Peace sign</b> — right hand = next · left hand = back.</div>
+      <div>👌 <b>Pinch</b> — 3 fingers up: drag or tap a chart/card.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { parsePptxBuffer } from '/js/pptx-parse.js';
+
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $('status');
+    const badgeEl = $('hostBadge');
+    const shareBtn = $('shareBtn');
+    const deckSel = $('deckSel');
+    const slideListEl = $('slideList');
+    const slideCountEl = $('slideCount');
+    const notesBoxEl = $('notesBox');
+    const apartBtn = $('apartBtn');
+    const CHANNEL_NAME = 'linkpresent-deck';
+
+    let hostKind = 'browser'; // 'teams' | 'zoom' | 'browser'
+    let stageWin = null;
+    let pendingPayload = null;
+    let currentDeck = null; // { name, slides: [{ index, title, notes }], buffer? }
+    let curSlide = 1;
+    let exploded = false;
+    let channel = null;
+
+    try {
+      channel = new BroadcastChannel(CHANNEL_NAME);
+      channel.onmessage = (e) => onStageMessage(e.data);
+    } catch (_) {}
+
+    addEventListener('message', (e) => {
+      if (e.origin === location.origin) onStageMessage(e.data);
+    });
+
+    function setStatus(msg, ok = false) {
+      statusEl.textContent = msg;
+      statusEl.classList.toggle('ok', ok);
+    }
+
+    function sendToStage(msg) {
+      if (channel) {
+        try { channel.postMessage(msg); return; } catch (_) {}
+      }
+      if (stageWin && !stageWin.closed) {
+        try { stageWin.postMessage(msg, location.origin); } catch (_) {}
+      }
+    }
+
+    function summarizeSlides(deckData) {
+      return (deckData.slides || []).map((s, idx) => {
+        let fallback = '';
+        for (const p of (s.pieces || [])) {
+          const paras = (p.text && p.text.paras) || p.paras || [];
+          for (const para of paras) {
+            const line = (para.runs || []).map((r) => r.t || r.text || '').join('').trim();
+            if (line) { fallback = line; break; }
+          }
+          if (fallback) break;
+        }
+        const title = (s.title && s.title.trim())
+          || (fallback ? fallback.split(/\r?\n/)[0].slice(0, 60) : `Slide ${idx + 1}`);
+        return { index: idx + 1, title, notes: (s.notes || '').trim() };
+      });
+    }
+
+    function renderDeckMeta() {
+      const slides = (currentDeck && currentDeck.slides) || [];
+      const total = Math.max(1, slides.length);
+      curSlide = Math.min(Math.max(1, curSlide), total);
+      slideCountEl.textContent = `${curSlide} / ${total}`;
+
+      slideListEl.innerHTML = '';
+      for (const s of slides) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'slide-item' + (s.index === curSlide ? ' active' : '');
+        btn.dataset.slide = String(s.index);
+        const num = document.createElement('span');
+        num.className = 'num';
+        num.textContent = String(s.index).padStart(2, '0');
+        const ttl = document.createElement('span');
+        ttl.className = 'ttl';
+        ttl.textContent = s.title || `Slide ${s.index}`;
+        btn.append(num, ttl);
+        btn.onclick = () => goToSlide(s.index);
+        slideListEl.appendChild(btn);
+      }
+
+      const active = slides[curSlide - 1];
+      const notes = active && active.notes ? active.notes : '';
+      notesBoxEl.textContent = notes || 'No speaker notes on this slide.';
+      notesBoxEl.classList.toggle('empty', !notes);
+    }
+
+    function goToSlide(index) {
+      if (!currentDeck || !currentDeck.slides.length) return;
+      curSlide = Math.min(Math.max(1, index), currentDeck.slides.length);
+      exploded = false;
+      apartBtn.textContent = '✦ PULL APART';
+      renderDeckMeta();
+      sendToStage({ type: 'linkpresent-slide', slide: curSlide });
+    }
+
+    function onStageMessage(msg) {
+      if (!msg) return;
+      if (msg.type === 'linkpresent-ready') {
+        if (pendingPayload) sendToStage(pendingPayload);
+      } else if (msg.type === 'linkpresent-loaded') {
+        pendingPayload = null;
+        shareBtn.disabled = false;
+        setStatus(`Live on stage: ${msg.name} (${msg.slides} slides)`, true);
+      } else if (msg.type === 'linkpresent-state') {
+        if (typeof msg.slide === 'number' && msg.slide !== curSlide) {
+          curSlide = msg.slide;
+          renderDeckMeta();
+        }
+        if (typeof msg.exploded === 'boolean') {
+          exploded = msg.exploded;
+          apartBtn.textContent = exploded ? '◉ REBUILD' : '✦ PULL APART';
+        }
+      }
+    }
+
+    function buildStageUrl() {
+      const qs = new URLSearchParams({ launcher: 'meeting' });
+      if ($('cleanOpt').checked) qs.set('clean', '1');
+      if (currentDeck && !currentDeck.buffer && currentDeck.name) {
+        qs.set('deck', currentDeck.name);
+        qs.set('slide', String(curSlide));
+      }
+      return `${location.origin}/linkpresent?${qs.toString()}`;
+    }
+
+    async function shareStage() {
+      const stageUrl = buildStageUrl();
+      if (currentDeck && currentDeck.buffer) {
+        pendingPayload = {
+          type: 'linkpresent-deck',
+          buffer: currentDeck.buffer,
+          name: currentDeck.name,
+          slide: curSlide,
+        };
+      }
+
+      if (hostKind === 'teams' && window.microsoftTeams && microsoftTeams.meeting && microsoftTeams.meeting.shareAppContentToStage) {
+        shareBtn.disabled = true;
+        microsoftTeams.meeting.shareAppContentToStage((err) => {
+          shareBtn.disabled = false;
+          if (err) {
+            setStatus(`Teams stage share fallback: opening window (${err.message || err})`);
+            openPopupStage(stageUrl);
+          } else {
+            setStatus('Shared LinkPresent to Teams meeting stage.', true);
+            if (pendingPayload) sendToStage(pendingPayload);
+          }
+        }, stageUrl);
+        return;
+      }
+
+      if (hostKind === 'zoom' && window.zoomSdk) {
+        try {
+          if (zoomSdk.startCollaborate) {
+            await zoomSdk.startCollaborate({ shareScreen: true });
+            setStatus('Started Zoom collaborate stage.', true);
+            if (pendingPayload) sendToStage(pendingPayload);
+            return;
+          }
+        } catch (_) {}
+      }
+
+      openPopupStage(stageUrl);
+    }
+
+    function openPopupStage(stageUrl) {
+      if (!stageWin || stageWin.closed) {
+        stageWin = window.open(stageUrl, 'linkpresent-stage');
+      } else {
+        stageWin.focus();
+      }
+      if (!stageWin) {
+        shareBtn.disabled = false;
+        setStatus('Pop-up blocked — allow pop-ups for LinkPresent and try again.');
+        return;
+      }
+      if (pendingPayload) {
+        sendToStage(pendingPayload);
+        let tries = 0;
+        const timer = setInterval(() => {
+          if (!pendingPayload || ++tries > 24 || (stageWin && stageWin.closed)) {
+            clearInterval(timer);
+            return;
+          }
+          sendToStage(pendingPayload);
+        }, 250);
+      } else if (currentDeck) {
+        setStatus(`Live on stage: ${currentDeck.name} (${currentDeck.slides.length} slides)`, true);
+      }
+    }
+
+    async function loadServerDeckMeta(name) {
+      try {
+        const r = await fetch('/api/deck?name=' + encodeURIComponent(name));
+        if (!r.ok) return;
+        const data = await r.json();
+        currentDeck = { name: data.name, slides: summarizeSlides(data), buffer: null };
+        curSlide = 1;
+        renderDeckMeta();
+      } catch (_) {}
+    }
+
+    async function loadLocalFile(file) {
+      if (!file || !/\.pptx$/i.test(file.name)) {
+        return setStatus('Choose a PowerPoint .pptx file.');
+      }
+      setStatus(`Unpacking ${file.name}…`);
+      try {
+        const buffer = await file.arrayBuffer();
+        const data = await parsePptxBuffer(buffer, file.name);
+        currentDeck = { name: data.name, slides: summarizeSlides(data), buffer };
+        curSlide = 1;
+        if (![...deckSel.options].some((o) => o.value === data.name)) {
+          const opt = document.createElement('option');
+          opt.value = data.name;
+          opt.textContent = data.name.replace(/\.pptx$/i, '') + ' (local)';
+          deckSel.prepend(opt);
+        }
+        deckSel.value = data.name;
+        renderDeckMeta();
+        await shareStage();
+      } catch (e) {
+        setStatus(e && e.message ? e.message : 'Could not unpack .pptx file.');
+      }
+    }
+
+    async function initDecks() {
+      try {
+        const r = await fetch('/api/decks');
+        const list = r.ok ? await r.json() : [];
+        deckSel.innerHTML = '';
+        for (const d of list) {
+          const o = document.createElement('option');
+          o.value = d.name;
+          o.textContent = d.name.replace(/\.pptx$/i, '');
+          deckSel.appendChild(o);
+        }
+        if (list.length) {
+          await loadServerDeckMeta(list[0].name);
+        }
+      } catch (_) {}
+    }
+
+    async function detectHost() {
+      if (window.microsoftTeams && microsoftTeams.app) {
+        try {
+          await Promise.race([
+            microsoftTeams.app.initialize(),
+            new Promise((_, rej) => setTimeout(rej, 900)),
+          ]);
+          hostKind = 'teams';
+          badgeEl.textContent = 'TEAMS MEETING';
+          badgeEl.classList.remove('off');
+          setStatus('Teams connected — click Share Stage to present.', true);
+          return;
+        } catch (_) {}
+      }
+      if (window.zoomSdk && zoomSdk.config) {
+        try {
+          await Promise.race([
+            zoomSdk.config({ capabilities: ['shareApp', 'startCollaborate', 'openUrl'] }),
+            new Promise((_, rej) => setTimeout(rej, 900)),
+          ]);
+          hostKind = 'zoom';
+          badgeEl.textContent = 'ZOOM APP';
+          badgeEl.classList.remove('off');
+          setStatus('Zoom connected — click Share Stage to present.', true);
+          return;
+        } catch (_) {}
+      }
+      hostKind = 'browser';
+      badgeEl.textContent = 'BROWSER STAGE';
+      setStatus('Sidebar ready — load a .pptx or share the stage window.', true);
+    }
+
+    shareBtn.onclick = () => shareStage();
+    $('pickBtn').onclick = () => $('fileInput').click();
+    $('fileInput').onchange = (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) loadLocalFile(f);
+      e.target.value = '';
+    };
+    deckSel.onchange = async () => {
+      await loadServerDeckMeta(deckSel.value);
+      if (stageWin && !stageWin.closed && currentDeck && !currentDeck.buffer) {
+        stageWin.location.href = buildStageUrl();
+      }
+    };
+    $('prevBtn').onclick = () => goToSlide(curSlide - 1);
+    $('nextBtn').onclick = () => goToSlide(curSlide + 1);
+    apartBtn.onclick = () => {
+      exploded = !exploded;
+      apartBtn.textContent = exploded ? '◉ REBUILD' : '✦ PULL APART';
+      sendToStage({ type: 'linkpresent-command', action: 'toggle-apart' });
+    };
+    $('cleanOpt').onchange = () => {
+      sendToStage({ type: 'linkpresent-command', action: 'set-clean', value: $('cleanOpt').checked });
+    };
+    $('pipOpt').onchange = () => {
+      sendToStage({ type: 'linkpresent-command', action: 'set-pip', value: $('pipOpt').checked });
+    };
+
+    window.__meetingSidebar = {
+      shareStage,
+      goToSlide,
+      loadLocalFile,
+      get curSlide() { return curSlide; },
+      get exploded() { return exploded; },
+      get deck() { return currentDeck; },
+    };
+
+    initDecks();
+    detectHost();
+  </script>
+</body>
+</html>
