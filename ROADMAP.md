@@ -34,8 +34,8 @@ Open work, in order. Update this file as things land; `CLAUDE.md` holds only wha
    - Done (scaffold & launcher): `office/manifest.xml`, `office/taskpane.html`, icons, and `BroadcastChannel` / `postMessage` handshake + live slide sync. Needs: HTTPS sideload test inside PowerPoint Desktop/Web.
 4. **Phase 4 — Zoom App & Microsoft Teams Meeting App (`meeting/`):**
    - Done (sidebar & Share-to-Stage): `meeting/sidebar.html`, `meeting/teams-manifest.json`, `meeting/zoom-app.json`, speaker notes, slide list, Stage/Camera mode toggles, and 2-way stage sync without OBS. Needs: HTTPS sideload test inside Teams/Zoom.
-5. **Phase 5 — Built-in virtual camera desktop wrapper:**
-   - Thin Electron/Tauri wrapper exposing LinkPresent as a virtual camera for Google Meet, Webex, and locked-down orgs (plus shared company decks only if requested).
+5. **Phase 5 — Built-in virtual camera desktop wrapper (`desktop/`):**
+   - Done (wrapper, offline server & vcam bridge): `desktop/main.js`, `desktop/server.js` (zero-Python loopback server), `desktop/vcam.js` (`VirtualCameraBridge`), `desktop/preload.js`, `desktop/package.json` (`.dmg` / `.msi` config), and MDM deployment guide. Needs: code-signing & native CoreMediaIO / DirectShow virtual camera driver packaging on macOS/Windows.
 
 ## Known gaps
 - Not yet tested on a real webcam with the new 7-take script (`peace-next`, `peace-back`, `point-apart`, `grab`, `tap`, `point`, `rest`).

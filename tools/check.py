@@ -403,6 +403,65 @@ def check_fidelity(base, threshold):
     print("  report: state/fidelity/report.html — worst slides first")
 
 
+def check_desktop(deck_names):
+    print("\nDesktop wrapper & Virtual Camera (desktop/)")
+    import shutil
+    try:
+        pkg = json.load(open(os.path.join(ROOT, "desktop", "package.json")))
+        b = pkg.get("build") or {}
+        ok_pkg = pkg.get("main") == "main.js" and "mac" in b and "win" in b and len(b.get("extraResources") or []) >= 6
+        report("desktop/package.json valid", ok_pkg, f"main={pkg.get('main')} · targets mac/win")
+    except Exception as e:  # noqa: BLE001
+        report("desktop/package.json valid", False, str(e))
+    node = shutil.which("node")
+    if not node:
+        print("  SKIP  node not installed — skipping desktop/server.js & vcam.js runtime checks")
+        return
+    first_deck = deck_names[0] if deck_names else ""
+    script = """
+const assert = require('assert');
+const { startDesktopServer } = require('./desktop/server');
+const { VirtualCameraBridge } = require('./desktop/vcam');
+(async () => {
+  const srv = await startDesktopServer(process.cwd(), 0);
+  try {
+    const r1 = await fetch(srv.baseUrl + '/linkpresent');
+    assert.strictEqual(r1.status, 200);
+    const r2 = await fetch(srv.baseUrl + '/js/hands.js');
+    assert.strictEqual(r2.status, 200);
+    assert.ok((r2.headers.get('cache-control') || '').includes('no-cache'));
+    const r3 = await fetch(srv.baseUrl + '/js/../server.py');
+    assert.strictEqual(r3.status, 404);
+    const r4 = await fetch(srv.baseUrl + '/desktop/main.js');
+    assert.strictEqual(r4.status, 404);
+    const decks = await (await fetch(srv.baseUrl + '/api/decks')).json();
+    assert.ok(Array.isArray(decks) && decks.length > 0);
+    const want = process.argv[1] || decks[0].name;
+    const raw = await fetch(srv.baseUrl + '/api/deck/raw?name=' + encodeURIComponent(want));
+    assert.strictEqual(raw.status, 200);
+    const buf = Buffer.from(await raw.arrayBuffer());
+    assert.strictEqual(buf.slice(0, 2).toString('ascii'), 'PK');
+  } finally {
+    await srv.close();
+  }
+  const vcam = new VirtualCameraBridge({ width: 64, height: 36, fps: 30, sink: 'null' });
+  vcam.start();
+  assert.strictEqual(vcam.pushFrame(Buffer.alloc(64 * 36 * 4)), true);
+  assert.strictEqual(vcam.pushFrame(Buffer.alloc(16)), false);
+  const st = vcam.status();
+  assert.strictEqual(st.active, true);
+  assert.strictEqual(st.frames, 1);
+  assert.strictEqual(st.dropped, 1);
+  vcam.stop();
+  assert.strictEqual(vcam.status().active, false);
+  console.log('OK desktop server + vcam');
+})().catch((e) => { console.error(e); process.exit(1); });
+"""
+    res = subprocess.run([node, "-e", script, first_deck], cwd=ROOT, capture_output=True, text=True, timeout=20)
+    report("desktop/server.js + vcam.js runtime", res.returncode == 0,
+           (res.stdout.strip() or res.stderr.strip().splitlines()[-1] if (res.stdout.strip() or res.stderr.strip()) else f"exit {res.returncode}"))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--quick", action="store_true", help="skip the browser (parser + server routes only)")
@@ -418,6 +477,7 @@ def main():
         proc, base = start_server(port)
         print(f"\n(server.py on port {port})")
         check_routes(base, decks)
+        check_desktop(decks)
         if not a.quick:
             check_browser(base, decks, a.all_slides)
             check_recordings(base)
